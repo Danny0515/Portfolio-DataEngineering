@@ -252,9 +252,11 @@ Portfolio-DataEngineering/
 ├── plan.md                        # 本計劃書
 ├── CLAUDE.md                      # AI Agent 開發守則 (慣例、技術棧、禁則)
 ├── docs/
+│   ├── arc42/                     # 架構文件 (arc42 模板,一章一份 .md)
+│   │   ├── 03_context.md          # 系統情境與範圍
+│   │   ├── 06_runtime_view.md     # 資料流 / 執行時期視角 (batch + streaming)
+│   │   └── 09_architecture_decisions.md  # 決策摘要,完整推理連結 adr/
 │   ├── architecture/
-│   │   ├── overview.md            # 系統架構總覽
-│   │   ├── data-flow.md           # 資料流圖 (batch + streaming)
 │   │   └── adr/                   # Architecture Decision Records (架構決策紀錄)
 │   │       ├── 0001-use-iceberg.md
 │   │       ├── 0002-msk-vs-kinesis.md
@@ -263,8 +265,6 @@ Portfolio-DataEngineering/
 │   │   ├── ingestion-market-data.md
 │   │   ├── cdc-trade-pipeline.md
 │   │   └── risk-aggregation.md
-│   ├── contracts/                 # 資料契約 (Data Contracts)
-│   │   └── *.contract.yaml
 │   ├── patterns/                  # Pattern Cards (可複用設計樣式)
 │   │   ├── wap-quality-gate.md
 │   │   ├── cdc-merge-into.md
@@ -274,6 +274,8 @@ Portfolio-DataEngineering/
 │   │   └── pipeline-failure.md
 │   ├── data-dictionary/           # 資料字典 (各層 schema 說明)
 │   └── glossary.md                # 名詞表 (業務 + 技術術語)
+├── contracts/                     # 資料契約 (Data Contracts,被 CI/pipeline 消費的設定檔)
+│   └── *.contract.yaml
 ├── infra/                         # Terraform (IaC)
 ├── pipelines/                     # Flink / Spark / dbt 程式碼
 ├── quality/                       # Great Expectations / Soda 設定
@@ -368,3 +370,4 @@ Portfolio-DataEngineering/
 | 日期 | 修改章節 | 原因 |
 | --- | --- | --- |
 | 2026-07-17 | 新增「使用方式」說明 + 建立本 Changelog | 釐清 plan.md 應作為實作期回頭查閱全貌的「地圖」，並補上可回溯的修訂紀錄機制 |
+| 2026-07-17 | §6.1 倉庫文件結構 | 改用 arc42 模板撰寫架構文件（取代 overview.md/data-flow.md），contracts/ 移至頂層以反映其為 CI/pipeline 消費的設定檔而非純文件 |

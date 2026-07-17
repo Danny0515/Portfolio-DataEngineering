@@ -73,7 +73,7 @@ Serving    ████████████               │ █    │ █
 
 **資料流**:
 ```
-第三方歷史行情檔 (每日 CSV/Parquet)
+模擬歷史行情檔 (自產 generator 產生,每日 CSV)
   → S3 (raw landing)
   → Bronze (Iceberg, append 原樣落地)
   → Silver (Iceberg, 去重 / 型別校正 / 標準化)
@@ -81,7 +81,7 @@ Serving    ████████████               │ █    │ █
   → Athena 查得到
 ```
 
-**具體技術**:S3 + Apache Iceberg (Glue Catalog) + Spark 或 dbt(擇一,先簡單)+ Athena。編排先手動或單一 script,**先不上 Airflow**。
+**具體技術**:S3 + Apache Iceberg (Glue Catalog) + Spark(PySpark,Bronze/Silver/Gold 統一使用,不用 dbt)+ Athena。編排先手動或單一 script,**先不上 Airflow**。
 
 **證明的 DE 判斷**:
 - **為什麼用 Iceberg 而非直接放 Parquet on S3?** —— schema evolution、time travel(審計)、ACID、避免小檔問題。
@@ -269,3 +269,4 @@ MSK (trade + market events)
 | 日期 | 修改章節 | 原因 |
 | --- | --- | --- |
 | 2026-07-17 | 新增「使用方式」說明 + 建立本 Changelog | 釐清本文件應作為實作期回頭查閱 Slice 全貌的參考,並補上可回溯的修訂紀錄機制 |
+| 2026-07-17 | Slice 0「資料流」與「具體技術」 | 依 slice0-batch-market-data.md §3 定案結論同步:資料來源改為自產模擬資料,運算引擎定為 Spark(不用 dbt) |
