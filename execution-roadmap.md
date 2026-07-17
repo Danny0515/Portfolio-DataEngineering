@@ -3,6 +3,25 @@
 > 本文件是 [plan.md](plan.md) 的**執行伴讀**。
 > `plan.md` 是「地圖」(這個平台包含哪些能力),本文件是「路線」(實際用什麼順序走完它)。
 > **plan.md 維持低頻不動;進度反映在 ADR 目錄與 Decision Log 的累積,而非改藍圖。**
+>
+> **使用方式**:實作到細節忘記整體 Slice 順序或某片的取捨理由時,回來查本文件即可,不需要翻遍 ADR 才能拼出全貌。修訂歷史見文末 [Changelog](#changelog)。
+
+---
+
+## 目錄 (Table of Contents)
+
+- [0. 核心原則:縱切,不要橫切 (Vertical over Horizontal)](#0-核心原則縱切不要橫切-vertical-over-horizontal)
+- [1. Slice 總覽 (Slice Overview)](#1-slice-總覽-slice-overview)
+- [2. Slice 明細 (Slice Details)](#2-slice-明細-slice-details)
+  - [Slice 0 — Walking Skeleton(批次骨架,刻意最薄)](#slice-0-walking-skeleton批次骨架刻意最薄)
+  - [Slice 1 — 資料品質 + 資料契約(疊在批次路徑上)](#slice-1-資料品質-資料契約疊在批次路徑上)
+  - [Slice 2 — CDC 交易串流管線(第一條串流,重頭戲)](#slice-2-cdc-交易串流管線第一條串流重頭戲)
+  - [Slice 3 — 即時 Serving 與風控(延續串流)](#slice-3-即時-serving-與風控延續串流)
+  - [Slice 4 — 治理與 DataOps(橫向鋪在既有管線)](#slice-4-治理與-dataops橫向鋪在既有管線)
+- [3. 每個 Slice 的完成 Gate(最重要的部分)](#3-每個-slice-的完成-gate最重要的部分)
+- [4. 執行節奏與紀律 (Cadence & Discipline)](#4-執行節奏與紀律-cadence-discipline)
+- [5. 與 plan.md 的關係(維護契約)](#5-與-planmd-的關係維護契約)
+- [6. Changelog](#6-changelog)
 
 ---
 
@@ -240,3 +259,13 @@ MSK (trade + market events)
 | `docs/architecture/adr/*` | 決策軌跡:每個技術選擇一份 | 高頻,隨時新增,只被取代不覆寫 |
 
 **任何調整只允許三種動作**:更新本文件的 Slice 內容、新增一份 ADR、或(極少數)更新 plan.md 的範圍。**禁止產生 plan-v2.md / roadmap-new.md 之類的分岔文件。**
+
+---
+
+## 6. Changelog
+
+> 只記錄本文件的**實質修訂**(範圍/Slice 拆分真的改變),不記錄規劃期的例行討論調整。用於回溯「這份路線曾經因為什麼原因變成現在這樣」——日常閱讀全貌不需要看這裡,只有要追查某段內容的變動原因時才查。
+
+| 日期 | 修改章節 | 原因 |
+| --- | --- | --- |
+| 2026-07-17 | 新增「使用方式」說明 + 建立本 Changelog | 釐清本文件應作為實作期回頭查閱 Slice 全貌的參考,並補上可回溯的修訂紀錄機制 |

@@ -3,6 +3,34 @@
 > 一個以 AWS 為核心、涵蓋完整資料工程生命週期 (Data Engineering Lifecycle) 的金融資料分析平台。
 > 同時包含 **Batch (批次)** 與 **Streaming (串流)** 兩條資料路徑，並以 **Lakehouse (資料湖倉)** 架構為基礎。
 > 本專案刻意以 **Spec-Driven Development (規格驅動開發)** + **文件架構 (Documentation Architecture)** 為前提設計，方便使用 Harness Engineer (AI Agent 開發者) 進行開發。
+>
+> **使用方式**：本文件是專案的「地圖」——實作進行到細節、忘記最初動機或架構全貌時，回來看本文件即可掌握全貌，不需要另外比對 ADR / Decision Log 才能拼出需求全貌。ADR 記錄的是「為什麼選這個」的局部理由，本文件記錄的是「整體是什麼」。修訂歷史見文末 [Changelog](#changelog)。
+
+---
+
+## 目錄 (Table of Contents)
+
+- [0. 專案定位 (Positioning)](#0-專案定位-positioning)
+  - [業務情境 (Business Scenario)](#業務情境-business-scenario)
+- [1. 整體架構 (High-Level Architecture)](#1-整體架構-high-level-architecture)
+- [2. 完整資料工程生命週期 (Data Engineering Lifecycle)](#2-完整資料工程生命週期-data-engineering-lifecycle)
+  - [2.1 Ingestion (資料擷取)](#21-ingestion-資料擷取)
+  - [2.2 Storage (儲存 — Lakehouse)](#22-storage-儲存-lakehouse)
+  - [2.3 Transformation (轉換)](#23-transformation-轉換)
+  - [2.4 Serving (資料服務)](#24-serving-資料服務)
+- [3. Data Quality (資料品質)](#3-data-quality-資料品質)
+- [4. Metadata Management (中繼資料管理)](#4-metadata-management-中繼資料管理)
+  - [4.1 Data Catalog & Lineage (資料目錄與血緣)](#41-data-catalog-lineage-資料目錄與血緣)
+  - [4.2 Data Contract (資料契約)](#42-data-contract-資料契約)
+- [5. DataOps (第二階段)](#5-dataops-第二階段)
+- [6. 文件架構設計 (Documentation Architecture for Harness Engineering)](#6-文件架構設計-documentation-architecture-for-harness-engineering)
+  - [6.1 倉庫文件結構 (Repository Documentation Layout)](#61-倉庫文件結構-repository-documentation-layout)
+  - [6.2 核心文件類型 (Document Types)](#62-核心文件類型-document-types)
+  - [6.3 Spec 範本 (Spec Template)](#63-spec-範本-spec-template)
+- [7. 分階段交付 (Phased Delivery)](#7-分階段交付-phased-delivery)
+- [8. 技術選型總表 (Technology Selection Summary)](#8-技術選型總表-technology-selection-summary)
+- [9. 成功標準 (Definition of Done)](#9-成功標準-definition-of-done)
+- [Changelog](#changelog)
 
 ---
 
@@ -330,4 +358,13 @@ Portfolio-DataEngineering/
 - [ ] 全部基礎設施以 Terraform 管理，CI/CD 可自動測試與部署 (Phase 2)
 - [ ] 文件架構完整：README + ADR + Spec + Pattern Card + Runbook + Data Contract 齊備
 - [ ] 整個專案可由 Harness Engineer 依 Spec 重現開發
-```
+
+---
+
+## Changelog
+
+> 只記錄本文件的**實質修訂**（範圍/架構真的改變），不記錄規劃期的例行討論調整。用於回溯「這份地圖曾經因為什麼原因變成現在這樣」——日常閱讀全貌不需要看這裡，只有要追查某段內容的變動原因時才查。
+
+| 日期 | 修改章節 | 原因 |
+| --- | --- | --- |
+| 2026-07-17 | 新增「使用方式」說明 + 建立本 Changelog | 釐清 plan.md 應作為實作期回頭查閱全貌的「地圖」，並補上可回溯的修訂紀錄機制 |
