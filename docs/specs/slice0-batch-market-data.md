@@ -83,7 +83,7 @@
 | --- | --- | --- | --- |
 | 1 | 專案骨架 | `src/` 下建立 `ingestion/`、`transform/` 等模組目錄 | 目錄結構 |
 | 2 | 模擬資料 generator | 產生每日 OHLCV CSV（symbol, date, open, high, low, close, volume） | `src/ingestion/generate_market_data.py` |
-| 3 | Raw landing | 產生的 CSV 落地到 S3 / MinIO 的 raw 路徑 | `s3://.../raw/market_data/` |
+| 3 | Raw landing | 產生的 CSV 落地到 S3 raw 路徑。Bucket 透過 `infra/environments/dev/` 的 Terraform 建立(本專案專屬 bucket `danny-data-engineering`,非既有共用 bucket,依 RULE-001 禁止用 aws cli 部署) | `s3://danny-data-engineering/raw/market_data/` |
 | 4 | Bronze 落地 | 讀 raw CSV，原樣寫入 Iceberg Bronze table（append-only，保留來源 metadata） | Iceberg table `bronze.market_data` |
 | 5 | Iceberg + Glue Catalog 設定 | 建立 AWS Glue Data Catalog 作為 Iceberg catalog | catalog 設定檔 |
 | 6 | Silver 轉換 | PySpark 讀 Bronze，去重、型別校正（price → decimal、date → date type）、標準化欄位命名 | Iceberg table `silver.market_data` |

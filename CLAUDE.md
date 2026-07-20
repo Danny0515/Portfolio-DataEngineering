@@ -1,5 +1,21 @@
 # CLAUDE.md — Repository Guidance
 
+## 環境限制 (Environment Constraints)
+
+### AWS 資源存取：僅能透過 SSH Bastion
+
+組織 AWS 帳號受 **Control Tower** 治理限制，本機無法直接執行 `aws cli` 操作雲端資源。所有 AWS CLI 操作必須先 SSH 進 bastion instance（`ec2-user@danny-ops`）再於遠端執行。
+
+詳細連線設定與故障排除見 [docs/runbooks/aws-access-via-bastion.md](docs/runbooks/aws-access-via-bastion.md)。
+
+**對 Agent 的行為約束**：規劃或建議任何需要雲端憑證的操作（AWS CLI、Terraform apply 等）時，預設情境是「先 `ssh danny-ops`，再於遠端執行」，不要假設本機有直接的 AWS 存取權限。
+
+## 專案規則 (Project Rules)
+
+所有 Agent 行為規則統一記錄於 [ai/contexts/rules.md](ai/contexts/rules.md)，**每次操作前必須遵守，不因對話情境而例外**。新增規則一律透過 `add_project_rule` skill 進行。目前已定義：
+
+- RULE-001：AWS 資源部署一律使用 Terraform，禁止用 AWS CLI 部署（AWS CLI 僅限驗證/排錯，且限 bastion 上執行）
+
 ## 文件治理規則 (Document Governance)
 
 本專案的頂層規劃文件為 [plan.md](plan.md)（藍圖/北極星）與 [execution-roadmap.md](execution-roadmap.md)（執行路線/Slice 順序）。兩者的維護契約定義在 execution-roadmap.md §5：
