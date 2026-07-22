@@ -51,13 +51,13 @@ aws glue get-databases
 
 ## 透過 Terraform 部署 AWS 資源
 
-依 [ai/contexts/rules.md](../../ai/contexts/rules.md) RULE-001，所有 AWS 資源的建立/修改/刪除一律用 Terraform（`infra/`），禁止用 aws cli 部署。本機沒有 AWS 憑證，`terraform apply` 也必須在 bastion 上執行；程式碼透過 rsync 從本機同步過去（本機 repo 是唯一事實來源，不在 bastion 上直接修改 `.tf` 檔案）。
+依 [ai/contexts/rules.md](../../ai/contexts/rules.md) RULE-001，所有 AWS 資源的建立/修改/刪除一律用 Terraform（`infra/`），禁止用 aws cli 部署。本機沒有 AWS 憑證，`terraform apply` 也必須在 bastion 上執行；程式碼透過 [rsync_to_bastion](../../.claude/commands/rsync_to_bastion.md) 統一同步整個專案過去（本機 repo 是唯一事實來源，不在 bastion 上直接修改 `.tf` 檔案）。
 
 ### Bootstrap（僅第一次，建立 state 存放用的 bucket 本身）
 
 ```bash
-# 1. 本機同步程式碼（此時 versions.tf 還沒有 backend "s3" 區塊，用預設 local backend）
-rsync -av --delete --exclude='.terraform/' --exclude='terraform.tfstate*' infra/ danny-ops:~/Portfolio-DataEngineering/infra/
+# 1. 同步整個專案（此時 versions.tf 還沒有 backend "s3" 區塊，用預設 local backend）
+bash scripts/rsync_to_bastion.sh
 
 # 2. bastion 上建立 bucket
 ssh danny-ops
@@ -65,7 +65,7 @@ cd ~/Portfolio-DataEngineering/infra/environments/dev
 terraform init
 terraform apply   # 建立 danny-data-engineering bucket + versioning/加密/public access block
 
-# 3. 本機：把 versions.tf 裡的 backend "s3" 區塊取消註解，再次 rsync 上去
+# 3. 本機：把 versions.tf 裡的 backend "s3" 區塊取消註解，再次跑 rsync_to_bastion
 
 # 4. bastion 上把 local state 遷移進 S3
 terraform init -migrate-state
@@ -74,7 +74,7 @@ terraform init -migrate-state
 ### 日常流程（之後每次變更）
 
 ```bash
-rsync -av --delete --exclude='.terraform/' --exclude='terraform.tfstate*' infra/ danny-ops:~/Portfolio-DataEngineering/infra/
+bash scripts/rsync_to_bastion.sh
 ssh danny-ops
 cd ~/Portfolio-DataEngineering/infra/environments/dev
 terraform plan
@@ -93,6 +93,24 @@ terraform state list
 
 ---
 
+## 上傳模擬資料到 Raw Landing
+
+Slice0 §4 項目 2-3：`generate_stock_data.py` 產生的 CSV 落地到 S3 raw 路徑，同樣是資料面操作（不是資源部署，不受 RULE-001 限制），但因為本機沒有 AWS 憑證，落地這一步一樣要在 bastion 上執行：
+
+```bash
+# 1. 本機執行 generator，輸出到 data/raw/market_data/stock/dt=.../market_data.csv
+python3 src/ingestion/generate_stock_data.py
+
+# 2. 同步整個專案(含剛產生的 data/)到 bastion
+bash scripts/rsync_to_bastion.sh
+
+# 3. bastion 上用 aws s3 sync 落地
+ssh danny-ops
+aws s3 sync ~/Portfolio-DataEngineering/data/raw/market_data/stock/ s3://danny-data-engineering/raw/market_data/stock/
+```
+
+---
+
 ## 故障排除
 
 | 現象 | 原因 | 處理 |
@@ -102,7 +120,7 @@ terraform state list
 | `Permission denied` 且帳號正確 | 私鑰檔權限過寬 | `chmod 400 ~/.ssh/danny_ops.pem` |
 | bastion 上 `aws cli` 指令回傳 `AccessDenied` | Control Tower guardrail 擋下該操作，或 bastion 的 IAM Role 權限不足 | 依 spec §3.1 決策，權限問題採**邊執行邊調整**：確認錯誤訊息缺哪個 action，回報負責 IAM 的人補權限，不預先設計完整權限模型 |
 | 想直接用 `aws s3 mb` / `aws s3api put-bucket-*` 等指令建立或修改資源 | 違反 RULE-001（禁止用 AWS CLI 部署） | 改用上方「透過 Terraform 部署 AWS 資源」流程；aws cli 僅能用於查詢/驗證 |
-| `rsync --delete` 把 bastion 上的 `.terraform/`、`terraform.tfstate` 也刪掉 | 本機 repo 沒有這些檔案（它們只在 bastion 執行 `terraform init/apply` 後才產生），`--delete` 會把 bastion 上「本機沒有」的檔案一併清掉 | 一定要帶 `--exclude='.terraform/' --exclude='terraform.tfstate*'`（見上方指令）；若已經刪除且用的是 S3 backend，AWS 上的資源不受影響，用 `terraform import <resource_address> <id>` 把資源重新關聯回新的 state 即可，不需要重建資源 |
+| `rsync --delete` 把 bastion 上的 `.terraform/`、`terraform.tfstate` 也刪掉 | 本機 repo 沒有這些檔案（它們只在 bastion 執行 `terraform init/apply` 後才產生），`--delete` 會把 bastion 上「本機沒有」的檔案一併清掉 | 一律用 [scripts/rsync_to_bastion.sh](../../scripts/rsync_to_bastion.sh)（已內建正確 exclude 清單），不要手寫 rsync 指令；若已經刪除且用的是 S3 backend，AWS 上的資源不受影響，用 `terraform import <resource_address> <id>` 把資源重新關聯回新的 state 即可，不需要重建資源 |
 
 ---
 

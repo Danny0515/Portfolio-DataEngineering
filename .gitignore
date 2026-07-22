@@ -229,3 +229,6 @@ override.tf.json
 *_override.tf.json
 .terraformrc
 terraform.rc
+
+# Generated data (regenerable, not tracked)
+data/

@@ -45,7 +45,7 @@
 
 ### 業務情境 (Business Scenario)
 
-模擬一個 **券商 / 金融科技公司的資料平台**，整合三類金融資料：
+模擬一個 **券商 / 金融科技公司的資料平台**，整合三類金融資料，各自細分子類別：
 
 1. **市場行情 (Market Data)**：即時報價、Tick 資料、K 線 — 高頻 Streaming
 2. **交易資料 (Transaction Data)**：下單、成交、帳務 — CDC (Change Data Capture) Streaming + Batch 對帳
@@ -122,6 +122,7 @@
 - **儲存底層**：Amazon S3 (含 S3 Lifecycle 做冷熱分層)
 - **Table Format**：Apache Iceberg (透過 Glue Data Catalog 作為 Iceberg Catalog)
 - **檔案格式**：Parquet (列式、壓縮、適合分析)
+- **命名慣例**：三大資料領域（Market Data／Transaction Data／User Behavior）內部依**資產類別／子類型**再細分一層，例如股票行情為 `market_data/stock/`（S3 路徑）、`<layer>.stock_data`（Iceberg table）；日後新增期貨、債券比照 `market_data/futures/`、`<layer>.futures_data`，不需重新設計既有命名。
 
 ### 2.3 Transformation (轉換)
 
@@ -371,3 +372,4 @@ Portfolio-DataEngineering/
 | --- | --- | --- |
 | 2026-07-17 | 新增「使用方式」說明 + 建立本 Changelog | 釐清 plan.md 應作為實作期回頭查閱全貌的「地圖」，並補上可回溯的修訂紀錄機制 |
 | 2026-07-17 | §6.1 倉庫文件結構 | 改用 arc42 模板撰寫架構文件（取代 overview.md/data-flow.md），contracts/ 移至頂層以反映其為 CI/pipeline 消費的設定檔而非純文件 |
+| 2026-07-22 | §2.2 Storage | 補上資產類別命名慣例，回應 Slice0 stock 資料命名需求 |
