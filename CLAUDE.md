@@ -2,19 +2,25 @@
 
 ## 環境限制 (Environment Constraints)
 
-### AWS 資源存取：僅能透過 SSH Bastion
+### AWS 資源存取：MFA 長期憑證優先，SSH Bastion 為備援
 
-組織 AWS 帳號受 **Control Tower** 治理限制，本機無法直接執行 `aws cli` 操作雲端資源。所有 AWS CLI 操作必須先 SSH 進 bastion instance（`ec2-user@danny-ops`）再於遠端執行。
+組織 AWS 帳號受 **Control Tower** 治理限制。取得 AWS 憑證的優先順序（見 [ai/contexts/rules.md](ai/contexts/rules.md) RULE-002）：
+
+1. 先確認本機是否已有可重用的 MFA session（base profile `dt-lab-long-term` 對應的 `dt-lab-long-term-mfa`）
+2. 若無，呼叫 global skill `aws-cli-mfa-session`，以 base profile `dt-lab-long-term` 建立 MFA session，之後直接在本機執行 `aws cli`
+3. 若透過該 skill 建立連線失敗，才改用 SSH 進 bastion instance（`ec2-user@danny-ops`）於遠端執行
 
 詳細連線設定與故障排除見 [docs/runbooks/aws-access-via-bastion.md](docs/runbooks/aws-access-via-bastion.md)。
 
-**對 Agent 的行為約束**：規劃或建議任何需要雲端憑證的操作（AWS CLI、Terraform apply 等）時，預設情境是「先 `ssh danny-ops`，再於遠端執行」，不要假設本機有直接的 AWS 存取權限。
+**對 Agent 的行為約束**：規劃或建議任何需要雲端憑證的操作（AWS CLI、Terraform apply 等）時，一律先跑 MFA session 檢查/建立流程；不要預設本機沒有 AWS 存取權限而直接跳過 MFA、改走 bastion。
 
 ## 專案規則 (Project Rules)
 
 所有 Agent 行為規則統一記錄於 [ai/contexts/rules.md](ai/contexts/rules.md)，**每次操作前必須遵守，不因對話情境而例外**。新增規則一律透過 `add_project_rule` skill 進行。目前已定義：
 
 - RULE-001：AWS 資源部署一律使用 Terraform，禁止用 AWS CLI 部署（AWS CLI 僅限驗證/排錯，且限 bastion 上執行）
+- RULE-002：AWS CLI 操作一律優先嘗試 MFA 長期憑證（`dt-lab-long-term`），SSH Bastion 降級為連線失敗時的備援手段
+- RULE-003：IAM 權限設定一律遵照 AWS 官方 best practice，與 `plan.md` 專案需求衝突時才跟使用者討論特例並留下 ADR
 
 ## 文件治理規則 (Document Governance)
 

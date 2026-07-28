@@ -79,18 +79,18 @@
 
 > 待 §3 確認後，此清單即為實作依據。項目大致依序執行。
 
-| # | 項目 | 說明 | 產出 |
-| --- | --- | --- | --- |
-| 1 | 專案骨架 | `src/` 下建立 `ingestion/`、`transform/` 等模組目錄 | 目錄結構 |
-| 2 | 模擬資料 generator | 產生每日 OHLCV CSV（symbol, date, open, high, low, close, volume） | `src/ingestion/generate_stock_data.py` |
-| 3 | Raw landing | 產生的 CSV 落地到 S3 raw 路徑。Bucket 透過 `infra/environments/dev/` 的 Terraform 建立(本專案專屬 bucket `danny-data-engineering`,非既有共用 bucket,依 RULE-001 禁止用 aws cli 部署) | `s3://danny-data-engineering/raw/market_data/stock/` |
-| 4 | Bronze 落地 | 讀 raw CSV，原樣寫入 Iceberg Bronze table（append-only，保留來源 metadata） | Iceberg table `bronze.stock_data` |
-| 5 | Iceberg + Glue Catalog 設定 | 建立 AWS Glue Data Catalog 作為 Iceberg catalog | catalog 設定檔 |
-| 6 | Silver 轉換 | PySpark 讀 Bronze，去重、型別校正（price → decimal、date → date type）、標準化欄位命名 | Iceberg table `silver.stock_data` |
-| 7 | Gold 聚合 | PySpark 做每日 OHLCV 聚合（此資料本身已是日頻，Gold 可先做簡單的月彙總或直接對映 Silver，視資料粒度而定） | Iceberg table `gold.daily_ohlcv` |
-| 8 | 查詢驗證 | Athena 查詢 Gold 層，人工核對筆數與數字正確性 | 驗證紀錄 |
-| 9 | Partition 設計 | 依交易日期（如 `date` 或 `year/month`）切 partition | table partition spec |
-| 10 | 文件產出 | 依 execution-roadmap.md §2 Slice0 要求 | 見下方 §9 |
+| # | 項目 | 說明 | 產出 | 完成 |
+| --- | --- | --- | --- | --- |
+| 1 | 專案骨架 | `src/` 下建立 `ingestion/`、`transform/` 等模組目錄 | 目錄結構 | ✅ |
+| 2 | 模擬資料 generator | 產生每日 OHLCV CSV（symbol, date, open, high, low, close, volume） | `src/ingestion/generate_stock_data.py` | ✅ |
+| 3 | Raw landing | 產生的 CSV 落地到 S3 raw 路徑。Bucket 透過 `infra/environments/dev/` 的 Terraform 建立(本專案專屬 bucket `danny-data-engineering`,非既有共用 bucket,依 RULE-001 禁止用 aws cli 部署) | `s3://danny-data-engineering/raw/market_data/stock/` | ✅ |
+| 4 | Bronze 落地 | 讀 raw CSV，原樣寫入 Iceberg Bronze table（append-only，保留來源 metadata） | Iceberg table `bronze.stock_data` | ✅ |
+| 5 | Iceberg + Glue Catalog 設定 | 建立 AWS Glue Data Catalog 作為 Iceberg catalog | catalog 設定檔 | ✅ |
+| 6 | Silver 轉換 | PySpark 讀 Bronze，去重、型別校正（price → decimal、date → date type）、標準化欄位命名 | Iceberg table `silver.stock_data` | |
+| 7 | Gold 聚合 | PySpark 做每日 OHLCV 聚合（此資料本身已是日頻，Gold 可先做簡單的月彙總或直接對映 Silver，視資料粒度而定） | Iceberg table `gold.daily_ohlcv` | |
+| 8 | 查詢驗證 | Athena 查詢 Gold 層，人工核對筆數與數字正確性 | 驗證紀錄 | |
+| 9 | Partition 設計 | 依交易日期（如 `date` 或 `year/month`）切 partition | table partition spec | |
+| 10 | 文件產出 | 依 execution-roadmap.md §2 Slice0 要求 | 見下方 §9 | |
 
 ---
 

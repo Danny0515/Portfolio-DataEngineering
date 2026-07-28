@@ -57,3 +57,33 @@
 ### Next Steps
 
 - [ ] (延續 Session 001) 依 §4 項目 4-10：實作 Bronze/Silver/Gold PySpark 轉換、建立 Glue Data Catalog、Athena 查詢驗證、partition 設計，並補齊 ADR（0001-use-iceberg、0002-medallion-layering）
+
+---
+
+## Session 003 — 2026-07-28
+
+- **Engineer**: Danny
+- **Role**: Data Engineer
+- **LLM Used**: Claude Code (claude-sonnet-5)
+- **Module**: slice0-bronze-glue
+
+### Completed
+
+- [x] 盤點 Slice0 §4.4~4.5 所需的 Glue Catalog/IAM 現況：SSH 進 bastion 查現有 `danny-ops` role 權限與既有 Glue databases；釐清運算引擎採 AWS Glue Jobs（代管 serverless Spark），不在本機/bastion 裝 Java/PySpark
+- [x] 實測用 bastion 借來的暫時憑證從本機直接呼叫 AWS API（`sts`/`s3`/`glue`）皆成功，確認限制其實是「本機沒有帳號憑證」而非網路層級限制；新增 RULE-002（AWS CLI 優先用 MFA 長期憑證 `dt-lab-long-term`，SSH bastion 降級為備援），同步更新 CLAUDE.md「環境限制」章節
+- [x] 用 plan mode 規劃並實作 Slice0 §4.4~4.5：新增 `infra/environments/dev/{iam.tf,glue.tf,lakeformation.tf}`（Glue Database `bronze`/`silver`/`gold`、Glue Job 執行角色、Glue Job 定義）、`main.tf` 改名 `s3.tf` 呼應服務命名慣例、`src/transform/bronze_stock_data.py`（PySpark Bronze 落地腳本，讀 raw CSV 加 `ingest_time`/`source_file` 後 append 進 Iceberg，型別/品質檢查刻意留白）、根目錄 `pyproject.toml`（uv + ruff）
+- [x] 新增 ADR-0001（`docs/architecture/adr/0001-use-iceberg.md`，為何用 Iceberg 而非 Parquet on S3）與 ADR-0002（`0002-medallion-layering.md`，為何分 Bronze/Silver/Gold 三層），同步 `docs/arc42/09_architecture_decisions.md` 決策總表
+- [x] 本機未裝過 Terraform、Homebrew 因系統 Command Line Tools 過舊裝不了，改用官方 release 下載靜態執行檔到 `~/.local/bin/terraform`（已驗證 checksum）繞過 CLT 依賴；後續以 `AWS_PROFILE=dt-lab-long-term-mfa` 本機直接 `terraform apply`
+- [x] 首次觸發 Glue Job 失敗：`Insufficient Lake Formation permission(s): Required Describe on bronze`——IAM policy 正確但這帳號的 Glue Data Catalog 疊了一層 Lake Formation 授權，`CreateDatabaseDefaultPermissions`/`CreateTableDefaultPermissions` 皆為空，新建 database 不會像舊資料庫一樣自動繼承 `IAM_ALLOWED_PRINCIPALS`；補上 `aws_lakeformation_permissions`（grant 給 Glue Job 執行角色），重跑成功，Iceberg snapshot 顯示 `total-records: 786`，與本機 raw CSV 786 筆一致
+- [x] 使用者用 Athena 人工查詢又踩到第二次 Lake Formation 坑（`Relation contains no accessible columns`）：用 CLI 拆解測試（`SHOW COLUMNS` 成功、`SELECT *` 全部欄位不可存取）排除 SQL 語法問題，確認 Lake Formation Data Lake Admin 身份只代表能管理權限、不代表自動有資料 SELECT 權限；補上第二組 grant 給人身帳號 `dannyhuang@cathayholdings.com.tw`，查詢恢復正常
+- [x] 新增 RULE-003（IAM 權限設定一律遵照 AWS 官方 best practice，與 plan.md/專案需求衝突時才討論特例並留 ADR），直接呼應本次兩次 Lake Formation 除錯過程
+- [x] 依使用者臨時要求，將 `bronze`/`silver`/`gold` 三個 Glue database 的 `description` 都改為 `danny-test` 並重新部署
+
+### Related ADRs
+
+- [ADR-0001](../../docs/architecture/adr/0001-use-iceberg.md)：為何用 Iceberg 而非直接 Parquet on S3
+- [ADR-0002](../../docs/architecture/adr/0002-medallion-layering.md)：為何分 Bronze/Silver/Gold 三層
+
+### Next Steps
+
+- [ ] (延續 Session 002) 依 §4 項目 6-9：實作 Silver/Gold PySpark 轉換、Athena 正式查詢驗證（本次僅為除錯過程中的手動驗證，非正式驗收）、partition 設計
