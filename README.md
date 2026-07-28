@@ -15,7 +15,6 @@
 - [架構總覽 (Architecture Overview)](#架構總覽-architecture-overview)
 - [技術棧 (Tech Stack)](#技術棧-tech-stack)
 - [目前進度 (Current Status)](#目前進度-current-status)
-- [快速開始 (Quick Start)](#快速開始-quick-start)
 - [文件導覽 (Documentation Map)](#文件導覽-documentation-map)
 
 ---
