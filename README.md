@@ -2,12 +2,13 @@
 
 ## 專案簡介 (Project Introduction)
 
-**FinLakehouse** 是一個以 AWS 為核心、涵蓋完整資料工程生命週期 (Data Engineering Lifecycle) 的金融資料分析平台。專案模擬券商／金融科技公司的資料平台情境，整合三類金融資料——市場行情 (Market Data)、交易資料 (Transaction Data)、使用者行為 (User Behavior)，同時涵蓋 **Batch (批次)** 與 **Streaming (串流)** 兩條資料路徑，並以 **Lakehouse (資料湖倉)** 架構為基礎。
-核心賣點不是單純 ETL，而是涵蓋 Ingestion → Transformation → Serving 的完整生態系，含 Data Quality (資料品質)、Metadata Management (中繼資料管理)、DataOps。完整的架構願景、技術選型與分階段交付規劃見 [plan.md](plan.md)，執行順序見 [execution-roadmap.md](execution-roadmap.md)。
+**FinLakehouse** 是一個以 AWS 為核心、涵蓋完整資料工程生命週期的金融資料分析平台。模擬金融科技公司的資料平台情境，整合三類金融資料：Market Data、Transaction Data、User Behavior，同時涵蓋 **Batch (批次)** 與 **Streaming (串流)** 兩條資料路徑，並以 **Lakehouse (資料湖倉)** 架構為基礎。  
+核心賣點不是單純 ETL，而是涵蓋 Ingestion → Transformation → Serving 的完整生態系，含 Data Quality、Metadata Management、DataOps。完整的架構願景、技術選型與分階段交付規劃見 [plan.md](plan.md)，執行順序見 [execution-roadmap.md](execution-roadmap.md)。
 
-> 本專案是**完全透過 [Claude Code](https://claude.com/claude-code) 開發**的專案——從架構規劃、Spec 撰寫、Terraform 基礎設施、PySpark 轉換邏輯、IAM/Lake Formation 權限設計到 ADR／文件產出，皆由使用者與 Claude Code 協作完成。
-> 專案刻意採用 **Spec-Driven Development** 與完整的文件架構設計，方便 AI Agent 開發時能依規格與既有決策脈絡進行，不需臆測需求。
-> 更進一步的目標是 **「共智」(Collective Intelligence)** ——透過 Spec、ADR、Decision Log 與 Agent 執行規則等文件，把開發過程中的知識與決策脈絡留在專案本身，而不是留在開發者腦中，確保接手的開發者或其他 AI  都能單憑這些文件跟程式脈絡掌握專案全貌並延續開發，不需要仰賴口頭交接。
+### 專案目標 (Project Goals)
+- **完全透過 [Claude Code](https://claude.com/claude-code) 開發**：從架構規劃、Spec 撰寫、Terraform 基礎設施、PySpark 轉換邏輯、IAM/Lake Formation 權限設計到 ADR／文件產出，皆由使用者與 Claude Code 協作完成。  
+- **SDD**：完整的文件架構設計，方便 AI Agent 開發時能依規格與既有決策脈絡進行，不需臆測需求。  
+- **共智(Collective Intelligence)**：透過文件架構與 Agent 執行規則等文件，把開發過程中的知識與決策脈絡留在專案本身，而不是留在開發者腦內，確保接手的開發者或其他 AI  都能單憑這些文件跟程式脈絡掌握專案全貌並延續開發。
 
 ## 目錄 (Table of Contents)
 
