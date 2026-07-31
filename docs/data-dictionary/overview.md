@@ -12,7 +12,7 @@
 
 - **資料來源**：模擬資料 generator（[src/ingestion/generate_stock_data.py](../../src/ingestion/generate_stock_data.py)）產生假資料，不對接真實台股 API（見 [docs/specs/slice0-batch-market-data.md](../specs/slice0-batch-market-data.md) §3.2）
 - **涵蓋標的**：`2330`、`2454`、`3653`，1 年歷史（平日）
-- **現況**：Raw landing 已完成（Slice0 §4 項目 3），落地於 `s3://danny-data-engineering/raw/market_data/stock/`；Bronze/Silver/Gold（`bronze.stock_data`／`silver.stock_data`／`gold.daily_ohlcv`）尚未建立
+- **現況**：Raw landing 已完成（Slice0 §4 項目 3），落地於 `s3://danny-data-engineering/raw/market/stock/`；Bronze/Silver/Gold（`bronze.stock`／`silver.stock`／`gold.monthly_ohlcv`）尚未建立
 - **相關文件**：[docs/specs/slice0-batch-market-data.md](../specs/slice0-batch-market-data.md)
 
 ---

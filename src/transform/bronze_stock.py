@@ -8,9 +8,12 @@ truth.
 
 Bronze is intentionally a thin provenance-tagging pass, not a quality gate:
 no dedup, no negative/null filtering, no high>=low check, no type coercion
-beyond Spark's natural CSV type inference. Those all belong to Silver (spec
-docs/specs/slice0-batch-market-data.md §5/§6, item 6) — see
-docs/architecture/adr/0002-medallion-layering.md for the reasoning.
+at all. Every column lands as StringType (inferSchema=false) so Bronze's
+schema is stable regardless of how malformed the source CSV is — a single
+dirty row can otherwise silently shift Spark's inferred column type. Type
+parsing (price -> decimal, date -> date type, volume -> integer) is 100%
+owned by Silver (spec docs/specs/slice0-batch-market-data.md §5/§6, item 6)
+— see docs/architecture/adr/0002-medallion-layering.md for the reasoning.
 """
 
 import sys
@@ -35,13 +38,13 @@ job.init(args["JOB_NAME"], args)
 CATALOG = "glue_catalog"
 TABLE_FQN = f"{CATALOG}.{args['ICEBERG_DB']}.{args['ICEBERG_TABLE']}"
 
-# inferSchema is deliberate: Bronze lands data "as-is" per spec §1/§5, so
-# column types come from whatever Spark's CSV reader naturally infers, not
-# from an explicit StructType. Silver (item 6) owns explicit type
-# correction (price -> decimal, date -> date type).
+# inferSchema=false is deliberate (and written out explicitly rather than
+# relying on Spark's default): every column lands as StringType, so Bronze
+# never has to guess a type from the data. Silver (item 6) owns 100% of type
+# parsing (price -> decimal, date -> date type, volume -> integer).
 raw_df = (
     spark.read.option("header", "true")
-    .option("inferSchema", "true")
+    .option("inferSchema", "false")
     .option("recursiveFileLookup", "true")
     .csv(args["RAW_INPUT_PATH"])
 )

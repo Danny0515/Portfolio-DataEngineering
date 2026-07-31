@@ -15,9 +15,9 @@ Slice0 的資料流是「第三方歷史行情檔 → S3 raw landing → Bronze 
 
 採用 Medallion Architecture，分三層 Iceberg table：
 
-- **Bronze**（`bronze.stock_data`）：只做 provenance 標記（`ingest_time`、`source_file`），append-only，資料型別完全交給 Spark 的 CSV reader 自然推斷（`inferSchema=true`），不手寫 schema；不做任何去重、負值過濾、`high >= low` 檢查
-- **Silver**（`silver.stock_data`，spec item 6，尚未實作）：負責去重（`(symbol, date)` unique）、型別校正（price → decimal、date → date type）、標準化欄位命名
-- **Gold**（`gold.daily_ohlcv`，spec item 7，尚未實作）：對外可查詢的日頻行情聚合寬表
+- **Bronze**（`bronze.stock`）：只做 provenance 標記（`ingest_time`、`source_file`），append-only，全欄位以字串讀取（`inferSchema=false`），不手寫 schema、不做任何型別解析；不做任何去重、負值過濾、`high >= low` 檢查
+- **Silver**（`silver.stock`，spec item 6，尚未實作）：負責去重（`(symbol, date)` unique）、型別校正（price → decimal、date → date type）、標準化欄位命名
+- **Gold**（`gold.monthly_ohlcv`，spec item 7，尚未實作）：對外可查詢的月頻行情聚合寬表
 
 ## 理由 (Rationale)
 
@@ -30,5 +30,5 @@ Slice0 的資料流是「第三方歷史行情檔 → S3 raw landing → Bronze 
 
 - ✅ **正面**：Bronze 的實作極度單純（純 provenance tagging），降低 Slice0 落地的複雜度與出錯機會
 - ✅ **正面**：之後要加資料品質框架（Great Expectations/WAP，Slice1）時，切入點明確就是 Bronze→Silver 之間，不需要重新設計分層
-- ⚠️ **注意**：Bronze 重跑會累積重複列（同一份原始資料多次 append），這是刻意接受的行為，不是 bug；若之後資料量變大需要控制 Bronze 儲存成本，可以考慮加 Glue Job Bookmark（目前刻意不用，理由見 `src/transform/bronze_stock_data.py`）
+- ⚠️ **注意**：Bronze 重跑會累積重複列（同一份原始資料多次 append），這是刻意接受的行為，不是 bug；若之後資料量變大需要控制 Bronze 儲存成本，可以考慮加 Glue Job Bookmark（目前刻意不用，理由見 `src/transform/bronze_stock.py`）
 - ⚠️ **注意**：目前 Silver/Gold 的 Iceberg table 還沒建立（只有 Glue Database namespace 先建好），這兩層的實際實作是 spec item 6/7，本 ADR 先把分層理由記錄下來

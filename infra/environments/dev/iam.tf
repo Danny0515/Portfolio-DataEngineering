@@ -3,8 +3,8 @@ data "aws_caller_identity" "current" {}
 # Shared execution role for the medallion-layer Glue Jobs (Bronze now,
 # Silver/Gold later reuse it — they need near-identical S3 + Glue Catalog
 # access, so one role avoids repeated Terraform churn per layer).
-resource "aws_iam_role" "glue_market_data" {
-  name = "glue-market-data-job-role"
+resource "aws_iam_role" "glue_market" {
+  name = "glue-market-job-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -21,13 +21,13 @@ resource "aws_iam_role" "glue_market_data" {
 }
 
 resource "aws_iam_role_policy_attachment" "glue_service_role" {
-  role       = aws_iam_role.glue_market_data.name
+  role       = aws_iam_role.glue_market.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole"
 }
 
-data "aws_iam_policy_document" "glue_market_data_data_access" {
+data "aws_iam_policy_document" "glue_market_data_access" {
   statement {
-    sid    = "S3ReadWriteMarketDataPrefixes"
+    sid    = "S3ReadWriteMarketPrefixes"
     effect = "Allow"
     actions = [
       "s3:GetObject",
@@ -43,7 +43,7 @@ data "aws_iam_policy_document" "glue_market_data_data_access" {
   }
 
   statement {
-    sid    = "S3ListMarketDataPrefixes"
+    sid    = "S3ListMarketPrefixes"
     effect = "Allow"
     actions = [
       "s3:ListBucket",
@@ -94,12 +94,12 @@ data "aws_iam_policy_document" "glue_market_data_data_access" {
   }
 }
 
-resource "aws_iam_policy" "glue_market_data_data_access" {
-  name   = "glue-market-data-data-access"
-  policy = data.aws_iam_policy_document.glue_market_data_data_access.json
+resource "aws_iam_policy" "glue_market_data_access" {
+  name   = "glue-market-data-access"
+  policy = data.aws_iam_policy_document.glue_market_data_access.json
 }
 
-resource "aws_iam_role_policy_attachment" "glue_market_data_data_access" {
-  role       = aws_iam_role.glue_market_data.name
-  policy_arn = aws_iam_policy.glue_market_data_data_access.arn
+resource "aws_iam_role_policy_attachment" "glue_market_data_access" {
+  role       = aws_iam_role.glue_market.name
+  policy_arn = aws_iam_policy.glue_market_data_access.arn
 }

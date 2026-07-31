@@ -20,10 +20,20 @@ output "glue_databases" {
 
 output "glue_execution_role_arn" {
   description = "Medallion Glue Job 共用的執行角色 ARN"
-  value       = aws_iam_role.glue_market_data.arn
+  value       = aws_iam_role.glue_market.arn
 }
 
 output "glue_bronze_job_name" {
   description = "Bronze 落地 Glue Job 名稱，供 aws glue start-job-run 使用"
-  value       = aws_glue_job.bronze_stock_data.name
+  value       = aws_glue_job.bronze_stock.name
+}
+
+output "glue_silver_job_name" {
+  description = "Silver 轉換 Glue Job 名稱，供 aws glue start-job-run 使用"
+  value       = aws_glue_job.silver_stock.name
+}
+
+output "glue_gold_job_name" {
+  description = "Gold 月頻聚合 Glue Job 名稱，供 aws glue start-job-run 使用"
+  value       = aws_glue_job.gold_monthly_ohlcv.name
 }

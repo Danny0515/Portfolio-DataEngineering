@@ -122,7 +122,7 @@
 - **儲存底層**：Amazon S3 (含 S3 Lifecycle 做冷熱分層)
 - **Table Format**：Apache Iceberg (透過 Glue Data Catalog 作為 Iceberg Catalog)
 - **檔案格式**：Parquet (列式、壓縮、適合分析)
-- **命名慣例**：三大資料領域（Market Data／Transaction Data／User Behavior）內部依**資產類別／子類型**再細分一層，例如股票行情為 `market_data/stock/`（S3 路徑）、`<layer>.stock_data`（Iceberg table）；日後新增期貨、債券比照 `market_data/futures/`、`<layer>.futures_data`，不需重新設計既有命名。
+- **命名慣例**：三大資料領域（Market Data／Transaction Data／User Behavior）內部依**資產類別／子類型**再細分一層，例如股票行情為 `market/stock/`（S3 路徑）、`<layer>.stock`（Iceberg table）；日後新增期貨、債券比照 `market/futures/`、`<layer>.futures`，不需重新設計既有命名，命名不加 `_data` 尾綴。
 
 ### 2.3 Transformation (轉換)
 
@@ -373,3 +373,4 @@ Portfolio-DataEngineering/
 | 2026-07-17 | 新增「使用方式」說明 + 建立本 Changelog | 釐清 plan.md 應作為實作期回頭查閱全貌的「地圖」，並補上可回溯的修訂紀錄機制 |
 | 2026-07-17 | §6.1 倉庫文件結構 | 改用 arc42 模板撰寫架構文件（取代 overview.md/data-flow.md），contracts/ 移至頂層以反映其為 CI/pipeline 消費的設定檔而非純文件 |
 | 2026-07-22 | §2.2 Storage | 補上資產類別命名慣例，回應 Slice0 stock 資料命名需求 |
+| 2026-07-31 | §2.2 Storage | 命名慣例拿掉多餘的 `_data` 尾綴（`market_data`→`market`、`<layer>.stock_data`→`<layer>.stock`），因為資料湖倉裡的內容本來就是資料，尾綴多餘；已同步修改所有受影響的程式與文件（S3 路徑、Iceberg table 名稱、Terraform 資源識別字、IAM/Glue Job 命名） |

@@ -13,7 +13,7 @@ variable "bucket_name" {
 variable "raw_landing_prefix" {
   description = "Raw landing 資料的 S3 key prefix"
   type        = string
-  default     = "raw/market_data/stock/"
+  default     = "raw/market/stock/"
 }
 
 variable "iceberg_warehouse_prefix" {

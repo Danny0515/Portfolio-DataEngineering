@@ -12,9 +12,23 @@ resource "aws_glue_catalog_database" "medallion" {
 
 resource "aws_s3_object" "bronze_script" {
   bucket = aws_s3_bucket.data_engineering.id
-  key    = "glue-scripts/bronze_stock_data.py"
-  source = "${path.module}/../../../src/transform/bronze_stock_data.py"
-  etag   = filemd5("${path.module}/../../../src/transform/bronze_stock_data.py")
+  key    = "glue-scripts/bronze_stock.py"
+  source = "${path.module}/../../../src/transform/bronze_stock.py"
+  etag   = filemd5("${path.module}/../../../src/transform/bronze_stock.py")
+}
+
+resource "aws_s3_object" "silver_script" {
+  bucket = aws_s3_bucket.data_engineering.id
+  key    = "glue-scripts/silver_stock.py"
+  source = "${path.module}/../../../src/transform/silver_stock.py"
+  etag   = filemd5("${path.module}/../../../src/transform/silver_stock.py")
+}
+
+resource "aws_s3_object" "gold_script" {
+  bucket = aws_s3_bucket.data_engineering.id
+  key    = "glue-scripts/gold_monthly_ohlcv.py"
+  source = "${path.module}/../../../src/transform/gold_monthly_ohlcv.py"
+  etag   = filemd5("${path.module}/../../../src/transform/gold_monthly_ohlcv.py")
 }
 
 locals {
@@ -32,9 +46,9 @@ locals {
   ])
 }
 
-resource "aws_glue_job" "bronze_stock_data" {
-  name         = "slice0-bronze-stock-data"
-  role_arn     = aws_iam_role.glue_market_data.arn
+resource "aws_glue_job" "bronze_stock" {
+  name         = "slice0-bronze-stock"
+  role_arn     = aws_iam_role.glue_market.arn
   glue_version = "5.0"
   max_retries  = 0
   timeout      = 10
@@ -52,10 +66,70 @@ resource "aws_glue_job" "bronze_stock_data" {
     "--job-language"                     = "python"
     "--datalake-formats"                 = "iceberg"
     "--conf"                             = local.iceberg_spark_conf
-    "--TempDir"                          = "s3://${aws_s3_bucket.data_engineering.id}/glue-temp/bronze-stock-data/"
+    "--TempDir"                          = "s3://${aws_s3_bucket.data_engineering.id}/glue-temp/bronze-stock/"
     "--RAW_INPUT_PATH"                   = "s3://${aws_s3_bucket.data_engineering.id}/${var.raw_landing_prefix}"
     "--ICEBERG_DB"                       = "bronze"
-    "--ICEBERG_TABLE"                    = "stock_data"
+    "--ICEBERG_TABLE"                    = "stock"
+    "--enable-continuous-cloudwatch-log" = "true"
+    "--enable-metrics"                   = "true"
+  }
+}
+
+resource "aws_glue_job" "silver_stock" {
+  name         = "slice0-silver-stock"
+  role_arn     = aws_iam_role.glue_market.arn
+  glue_version = "5.0"
+  max_retries  = 0
+  timeout      = 10
+
+  command {
+    name            = "glueetl"
+    script_location = "s3://${aws_s3_bucket.data_engineering.id}/${aws_s3_object.silver_script.key}"
+    python_version  = "3"
+  }
+
+  worker_type       = "G.1X"
+  number_of_workers = 2
+
+  default_arguments = {
+    "--job-language"                     = "python"
+    "--datalake-formats"                 = "iceberg"
+    "--conf"                             = local.iceberg_spark_conf
+    "--TempDir"                          = "s3://${aws_s3_bucket.data_engineering.id}/glue-temp/silver-stock/"
+    "--SOURCE_DB"                        = "bronze"
+    "--SOURCE_TABLE"                     = "stock"
+    "--ICEBERG_DB"                       = "silver"
+    "--ICEBERG_TABLE"                    = "stock"
+    "--enable-continuous-cloudwatch-log" = "true"
+    "--enable-metrics"                   = "true"
+  }
+}
+
+resource "aws_glue_job" "gold_monthly_ohlcv" {
+  name         = "slice0-gold-monthly-ohlcv"
+  role_arn     = aws_iam_role.glue_market.arn
+  glue_version = "5.0"
+  max_retries  = 0
+  timeout      = 10
+
+  command {
+    name            = "glueetl"
+    script_location = "s3://${aws_s3_bucket.data_engineering.id}/${aws_s3_object.gold_script.key}"
+    python_version  = "3"
+  }
+
+  worker_type       = "G.1X"
+  number_of_workers = 2
+
+  default_arguments = {
+    "--job-language"                     = "python"
+    "--datalake-formats"                 = "iceberg"
+    "--conf"                             = local.iceberg_spark_conf
+    "--TempDir"                          = "s3://${aws_s3_bucket.data_engineering.id}/glue-temp/gold-monthly-ohlcv/"
+    "--SOURCE_DB"                        = "silver"
+    "--SOURCE_TABLE"                     = "stock"
+    "--ICEBERG_DB"                       = "gold"
+    "--ICEBERG_TABLE"                    = "monthly_ohlcv"
     "--enable-continuous-cloudwatch-log" = "true"
     "--enable-metrics"                   = "true"
   }

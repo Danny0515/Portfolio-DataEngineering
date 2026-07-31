@@ -87,3 +87,29 @@
 ### Next Steps
 
 - [ ] (延續 Session 002) 依 §4 項目 6-9：實作 Silver/Gold PySpark 轉換、Athena 正式查詢驗證（本次僅為除錯過程中的手動驗證，非正式驗收）、partition 設計
+
+## Session 004 — 2026-07-31
+
+- **Engineer**: Danny
+- **Role**: Data Engineer
+- **LLM Used**: Claude Code (claude-sonnet-5)
+- **Module**: slice0-silver-gold-glue
+
+### Completed
+
+- [x] 依 spec §4 項目 6~7，新增 `src/transform/silver_stock.py`（依 `(symbol, date)` 去重、`ingest_time` window 取最新批次、型別 cast、品質過濾、`createOrReplace()` 全量覆寫）與 `src/transform/gold_monthly_ohlcv.py`（月頻聚合、`min_by`/`max_by` 取當月首末交易日 OHLC、`createOrReplace()`）；Gold 改月頻而非日頻，因為 Silver 已是 1 row/(symbol, date)，日粒度聚合會是無意義的 no-op，table 定名 `gold.monthly_ohlcv`；同步在 `infra/environments/dev/glue.tf` 新增對應 Glue Job、`outputs.tf` 新增 output
+- [x] 新增 `docs/arc42/06_runtime_view.md`（mermaid flowchart 呈現目前實際批次執行流程）與 `08_concepts.md`（Medallion Architecture 通用設計原則，8.1~8.7），並同步修正 `docs/specs/slice0-batch-market-data.md`、`docs/architecture/adr/0002-medallion-layering.md` 的 append/overwrite 用詞與 Gold table 名稱
+- [x] 依使用者要求，Bronze 改為全字串讀取（`inferSchema=false`），型別解析 100% 交給 Silver（含新增 `volume` 顯式 cast、處理順序改為 dedup→cast→filter），同步更新 ADR-0002 與 arc42 08_concepts.md 對應段落
+- [x] 依使用者要求，拿掉命名慣例裡多餘的 `_data` 尾綴（`market_data`→`market`、`<layer>.stock_data`→`<layer>.stock`）：更新 `plan.md` §2.2 命名慣例本文並補 Changelog、Terraform 資源識別字全面改名（`aws_iam_role.glue_market_data`→`glue_market` 等，含 IAM/Lake Formation/Glue Job）、`bronze_stock_data.py`→`bronze_stock.py`、`generate_stock_data.py` 輸出路徑與檔名（`market_data.csv`→`market.csv`）
+- [x] 本機首次成功安裝 Terraform（先前因 Homebrew 需要的 Xcode Command Line Tools 過舊而卡住，使用者自行更新後裝成功），之後可直接本機 `terraform plan`/`apply`，不需再走 bastion
+- [x] 用 MFA session（RULE-002）完成：清空舊資源（舊 raw CSV、舊 `bronze.stock_data` table，經使用者在 Lake Formation Console 調整權限後親自執行刪除）→ `terraform apply`（20 個新建、16 個銷毀重建，符合改名預期）→ 重新產生模擬資料並上傳新路徑 → 依序觸發 Bronze/Silver/Gold 三個 Glue Job，全部成功
+- [x] Athena 查詢驗證（spec §4 項目 8，正式驗收）：筆數 Bronze 786 = Silver 786，各 symbol 均 262 筆；Gold 39 筆（3 symbol × 13 個月）；品質規則違規與去重重複皆為 0；以 `2330` 2025-08 交叉驗證聚合值（`SUM(volume)` = Gold 該列 `volume`），全部通過；整理成 `docs/runbooks/slice0-verification.md` 供之後重複使用
+- [x] 更新 `ai/contexts/infra_dev.md` 快照（依 `terraform output`/`state list` 實際輸出覆寫）
+
+### Related ADRs
+
+- 無新增 ADR；修正既有 [ADR-0002](../../docs/architecture/adr/0002-medallion-layering.md)（Bronze `inferSchema=false` 描述、table 改名），非新決策
+
+### Next Steps
+
+- [ ] (延續 Session 003) §4 項目 9：Partition 設計——Bronze/Silver/Gold 三層皆尚未宣告 `partitionedBy(...)`，留待之後一次處理三層（含 Bronze 用一次性 Athena DDL `ALTER TABLE ADD PARTITION FIELD` 回溯）

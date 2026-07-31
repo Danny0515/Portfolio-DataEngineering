@@ -4,7 +4,7 @@
 Output layout mirrors the S3 raw landing convention (see
 docs/specs/slice0-batch-market-data.md §4):
 
-    <output-dir>/dt=YYYY-MM-DD/market_data.csv
+    <output-dir>/dt=YYYY-MM-DD/market.csv
 
 Stdlib only by design (Slice0 stays minimal); no pandas/numpy/boto3.
 """
@@ -51,7 +51,7 @@ def parse_args():
     )
     parser.add_argument(
         "--output-dir",
-        default="data/raw/market_data/stock",
+        default="data/raw/market/stock",
         help="Output root directory",
     )
     parser.add_argument(
@@ -149,7 +149,7 @@ def main():
 
         day_dir = output_root / f"dt={day.isoformat()}"
         day_dir.mkdir(parents=True, exist_ok=True)
-        with (day_dir / "market_data.csv").open("w", newline="") as f:
+        with (day_dir / "market.csv").open("w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
             writer.writeheader()
             writer.writerows(rows)

@@ -16,7 +16,7 @@
   → S3 (raw landing)
   → Bronze (Iceberg, append 原樣落地)
   → Silver (Iceberg, 去重 / 型別校正 / 標準化)
-  → Gold  (Iceberg, 簡單日聚合，如每日 OHLCV)
+  → Gold  (Iceberg, 月頻 OHLCV 彙總)
   → Athena 查得到
 ```
 
@@ -83,11 +83,11 @@
 | --- | --- | --- | --- | --- |
 | 1 | 專案骨架 | `src/` 下建立 `ingestion/`、`transform/` 等模組目錄 | 目錄結構 | ✅ |
 | 2 | 模擬資料 generator | 產生每日 OHLCV CSV（symbol, date, open, high, low, close, volume） | `src/ingestion/generate_stock_data.py` | ✅ |
-| 3 | Raw landing | 產生的 CSV 落地到 S3 raw 路徑。Bucket 透過 `infra/environments/dev/` 的 Terraform 建立(本專案專屬 bucket `danny-data-engineering`,非既有共用 bucket,依 RULE-001 禁止用 aws cli 部署) | `s3://danny-data-engineering/raw/market_data/stock/` | ✅ |
-| 4 | Bronze 落地 | 讀 raw CSV，原樣寫入 Iceberg Bronze table（append-only，保留來源 metadata） | Iceberg table `bronze.stock_data` | ✅ |
+| 3 | Raw landing | 產生的 CSV 落地到 S3 raw 路徑。Bucket 透過 `infra/environments/dev/` 的 Terraform 建立(本專案專屬 bucket `danny-data-engineering`,非既有共用 bucket,依 RULE-001 禁止用 aws cli 部署) | `s3://danny-data-engineering/raw/market/stock/` | ✅ |
+| 4 | Bronze 落地 | 讀 raw CSV，原樣寫入 Iceberg Bronze table（append-only，保留來源 metadata） | Iceberg table `bronze.stock` | ✅ |
 | 5 | Iceberg + Glue Catalog 設定 | 建立 AWS Glue Data Catalog 作為 Iceberg catalog | catalog 設定檔 | ✅ |
-| 6 | Silver 轉換 | PySpark 讀 Bronze，去重、型別校正（price → decimal、date → date type）、標準化欄位命名 | Iceberg table `silver.stock_data` | |
-| 7 | Gold 聚合 | PySpark 做每日 OHLCV 聚合（此資料本身已是日頻，Gold 可先做簡單的月彙總或直接對映 Silver，視資料粒度而定） | Iceberg table `gold.daily_ohlcv` | |
+| 6 | Silver 轉換 | PySpark 讀 Bronze，去重、型別校正（price → decimal、date → date type）、標準化欄位命名 | Iceberg table `silver.stock` | |
+| 7 | Gold 聚合 | PySpark 做月頻 OHLCV 彙總（Silver 每個 (symbol, trade_date) 已固定 1 列，若仍照日粒度分組聚合會是無意義的 no-op，故改採月彙總以驗證真正的 groupBy 邏輯） | Iceberg table `gold.monthly_ohlcv` | |
 | 8 | 查詢驗證 | Athena 查詢 Gold 層，人工核對筆數與數字正確性 | 驗證紀錄 | |
 | 9 | Partition 設計 | 依交易日期（如 `date` 或 `year/month`）切 partition | table partition spec | |
 | 10 | 文件產出 | 依 execution-roadmap.md §2 Slice0 要求 | 見下方 §9 | |
@@ -98,9 +98,9 @@
 
 | 表 | 層級 | 內容 | 寫入模式 |
 | --- | --- | --- | --- |
-| `bronze.stock_data` | Bronze | 原始 OHLCV，含來源 metadata（ingest_time, source_file） | append |
-| `silver.stock_data` | Silver | 去重、型別校正後的 OHLCV | append（此 Slice 不 upsert，因為歷史行情是 immutable 事實——這是 Slice 2 upsert 的對照組） |
-| `gold.daily_ohlcv` | Gold | 對外可查詢的日頻行情寬表 | append / 依批次重算 |
+| `bronze.stock` | Bronze | 原始 OHLCV，含來源 metadata（ingest_time, source_file） | append |
+| `silver.stock` | Silver | 去重、型別校正後的 OHLCV | 全量覆寫（createOrReplace，非 row-level upsert）——每次執行皆從 Bronze 全量重算，這是 Slice 2 upsert 的對照組 |
+| `gold.monthly_ohlcv` | Gold | 對外可查詢的月頻行情彙總寬表 | 全量覆寫（createOrReplace）——每次執行皆從 Silver 全量重算 |
 
 ---
 

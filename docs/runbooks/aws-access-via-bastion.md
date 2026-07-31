@@ -98,7 +98,7 @@ terraform state list
 Slice0 §4 項目 2-3：`generate_stock_data.py` 產生的 CSV 落地到 S3 raw 路徑，同樣是資料面操作（不是資源部署，不受 RULE-001 限制），但因為本機沒有 AWS 憑證，落地這一步一樣要在 bastion 上執行：
 
 ```bash
-# 1. 本機執行 generator，輸出到 data/raw/market_data/stock/dt=.../market_data.csv
+# 1. 本機執行 generator，輸出到 data/raw/market/stock/dt=.../market.csv
 python3 src/ingestion/generate_stock_data.py
 
 # 2. 同步整個專案(含剛產生的 data/)到 bastion
@@ -106,7 +106,7 @@ bash scripts/rsync_to_bastion.sh
 
 # 3. bastion 上用 aws s3 sync 落地
 ssh danny-ops
-aws s3 sync ~/Portfolio-DataEngineering/data/raw/market_data/stock/ s3://danny-data-engineering/raw/market_data/stock/
+aws s3 sync ~/Portfolio-DataEngineering/data/raw/market/stock/ s3://danny-data-engineering/raw/market/stock/
 ```
 
 ---
