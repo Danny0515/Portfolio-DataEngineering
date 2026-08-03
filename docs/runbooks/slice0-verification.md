@@ -11,6 +11,37 @@
 - 本機已有可用的 AWS MFA session（`dt-lab-long-term-mfa`，見 `aws-cli-mfa-session` skill；也可以直接在 AWS Console 的 Athena 頁面手動貼上跑）
 - `bronze.stock`、`silver.stock`、`gold.monthly_ohlcv` 三個 Glue Job 都已成功執行至少一次（見 [aws-access-via-bastion.md](aws-access-via-bastion.md) 觸發方式；或 `aws glue start-job-run --job-name <job> --region ap-northeast-1 --profile dt-lab-long-term-mfa`）
 
+## Bronze 重跑驗證（spec §7 驗收標準）
+
+驗證「Bronze 可被重跑而不影響 Silver/Gold 正確性」——這個保證來自 ADR-0003 的全量覆寫設計，但設計保證不等於實測過，跑一次才能真的勾選這條驗收標準：
+
+```bash
+# 1. 記下重跑前的基準筆數
+# SELECT COUNT(*) FROM bronze.stock;  -- 例如 786
+
+# 2. 重跑 Bronze（會累積重複列，這是設計上的預期行為）
+aws glue start-job-run --job-name slice0-bronze-stock --region ap-northeast-1 --profile dt-lab-long-term-mfa
+
+# 3. 確認 Bronze 筆數變成兩倍（重跑前 N，重跑後應為 2N）
+# SELECT COUNT(*) FROM bronze.stock;
+
+# 4. 依序重跑 Silver、Gold
+aws glue start-job-run --job-name slice0-silver-stock --region ap-northeast-1 --profile dt-lab-long-term-mfa
+aws glue start-job-run --job-name slice0-gold-monthly-ohlcv --region ap-northeast-1 --profile dt-lab-long-term-mfa
+```
+
+```sql
+-- 5. Silver/Gold 筆數應該回到重跑前的基準值（不是兩倍）
+SELECT COUNT(*) FROM silver.stock;
+SELECT COUNT(*) FROM gold.monthly_ohlcv;
+
+-- 6. 抽樣幾筆數值，應該跟重跑前完全一致（Bronze 重跑不應該改變任何實際內容）
+SELECT symbol, trade_date, open, high, low, close, volume
+FROM silver.stock WHERE symbol = '<symbol>' ORDER BY trade_date LIMIT 3;
+```
+
+**參考結果**（2026-08-03 執行）：重跑前 Bronze/Silver/Gold = 786/786/39；重跑 Bronze 後 Bronze = 1572（如預期翻倍）；重跑 Silver/Gold 後兩者回到 786/39，抽樣數值與重跑前逐一比對完全一致。
+
 ## Bronze 驗證
 
 ```sql

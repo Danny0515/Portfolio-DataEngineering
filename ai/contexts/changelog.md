@@ -113,3 +113,4 @@
 ### Next Steps
 
 - [ ] (延續 Session 003) §4 項目 9：Partition 設計——Bronze/Silver/Gold 三層皆尚未宣告 `partitionedBy(...)`，留待之後一次處理三層（含 Bronze 用一次性 Athena DDL `ALTER TABLE ADD PARTITION FIELD` 回溯）
+- [ ] 精簡 `docs/arc42/08_concepts.md`

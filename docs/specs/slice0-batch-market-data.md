@@ -86,9 +86,9 @@
 | 3 | Raw landing | 產生的 CSV 落地到 S3 raw 路徑。Bucket 透過 `infra/environments/dev/` 的 Terraform 建立(本專案專屬 bucket `danny-data-engineering`,非既有共用 bucket,依 RULE-001 禁止用 aws cli 部署) | `s3://danny-data-engineering/raw/market/stock/` | ✅ |
 | 4 | Bronze 落地 | 讀 raw CSV，原樣寫入 Iceberg Bronze table（append-only，保留來源 metadata） | Iceberg table `bronze.stock` | ✅ |
 | 5 | Iceberg + Glue Catalog 設定 | 建立 AWS Glue Data Catalog 作為 Iceberg catalog | catalog 設定檔 | ✅ |
-| 6 | Silver 轉換 | PySpark 讀 Bronze，去重、型別校正（price → decimal、date → date type）、標準化欄位命名 | Iceberg table `silver.stock` | |
-| 7 | Gold 聚合 | PySpark 做月頻 OHLCV 彙總（Silver 每個 (symbol, trade_date) 已固定 1 列，若仍照日粒度分組聚合會是無意義的 no-op，故改採月彙總以驗證真正的 groupBy 邏輯） | Iceberg table `gold.monthly_ohlcv` | |
-| 8 | 查詢驗證 | Athena 查詢 Gold 層，人工核對筆數與數字正確性 | 驗證紀錄 | |
+| 6 | Silver 轉換 | PySpark 讀 Bronze，去重、型別校正（price → decimal、date → date type）、標準化欄位命名 | Iceberg table `silver.stock` | ✅ |
+| 7 | Gold 聚合 | PySpark 做月頻 OHLCV 彙總（Silver 每個 (symbol, trade_date) 已固定 1 列，若仍照日粒度分組聚合會是無意義的 no-op，故改採月彙總以驗證真正的 groupBy 邏輯） | Iceberg table `gold.monthly_ohlcv` | ✅ |
+| 8 | 查詢驗證 | Athena 查詢 Gold 層，人工核對筆數與數字正確性 | 驗證紀錄 | ✅ |
 | 9 | Partition 設計 | 依交易日期（如 `date` 或 `year/month`）切 partition。Silver/Gold 用 `months(...)` 月粒度 partition；Bronze 因 `date` 欄位是 string 型別不宣告 partition（理由見 ADR-0003） | table partition spec | ✅ |
 | 10 | 文件產出 | 依 execution-roadmap.md §2 Slice0 要求 | 見下方 §9 | ✅ |
 
@@ -116,10 +116,10 @@ Slice 0 **不引入品質框架**，僅做最基本的程式內檢查（留待 S
 
 ## 7. 驗收標準 (Acceptance Criteria)
 
-- [ ] 模擬資料 generator 可產生指定 symbol 數量與時間區間的 CSV
-- [ ] 資料端到端從 raw landing 流到 Gold 層，過程無需人工中途介入
-- [ ] Athena（或本地查詢引擎）可查到 Gold 層資料，且筆數與 generator 產出的原始資料一致
-- [ ] Bronze 層資料可被重跑（reprocess）而不影響 Silver/Gold 的正確性
+- [x] 模擬資料 generator 可產生指定 symbol 數量與時間區間的 CSV（實際執行產生 3 檔 symbol、262 個交易日、786 列，已上傳 raw landing）
+- [x] 資料端到端從 raw landing 流到 Gold 層，過程無需人工中途介入（Bronze/Silver/Gold 三個 Glue Job 依序觸發後皆自行跑完，過程無需人工修資料；三層之間本來就是手動觸發，非本項所指的「中途介入」，Airflow 編排本來就不在 Slice0 範圍內）
+- [x] Athena（或本地查詢引擎）可查到 Gold 層資料，且筆數與 generator 產出的原始資料一致（Gold 39 筆 = 3 symbol × 13 個月，並交叉驗證聚合數值正確，見 [slice0-verification.md](../runbooks/slice0-verification.md)）
+- [x] Bronze 層資料可被重跑（reprocess）而不影響 Silver/Gold 的正確性（實測：重跑 Bronze 後筆數如預期由 786 累積成 1572；重跑 Silver/Gold 後筆數回到 786／39，且抽樣數值與重跑前逐一比對完全一致，見 [slice0-verification.md](../runbooks/slice0-verification.md)）
 - [x] 上述 §9 文件皆已產出
 
 ---
