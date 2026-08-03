@@ -16,8 +16,13 @@ Silver/Gold" acceptance criterion. Spec §5 labels this write mode "append"
 to mean "no row-level MERGE/upsert" (contrasted with Slice 2's upsert) — not
 literal Spark append semantics.
 
-No partitionedBy: partition design is spec item 9, deferred (same reasoning
-as Bronze — see docs/specs/slice0-batch-market-data.md §4 item 9).
+Partitioned by months(trade_date) (spec item 9): trade_date is a proper
+DateType column here (unlike Bronze's string date), so Iceberg's
+date-based hidden-partition transform applies directly. Month granularity
+matches the actual data volume (a handful of symbols x ~1 year of trading
+days) — day-level partitioning would be needlessly fine-grained. See
+docs/architecture/adr/0003-append-vs-overwrite.md for why Bronze, in
+contrast, has no partition spec at all.
 
 Bronze now lands every column as StringType (inferSchema=false, see
 src/transform/bronze_stock.py), so Silver owns 100% of type parsing —
@@ -36,7 +41,7 @@ from awsglue.context import GlueContext
 from awsglue.job import Job
 from awsglue.utils import getResolvedOptions
 from pyspark.context import SparkContext
-from pyspark.sql.functions import col, row_number, to_date
+from pyspark.sql.functions import col, months, row_number, to_date
 from pyspark.sql.types import DecimalType, IntegerType
 from pyspark.sql.window import Window
 
@@ -109,6 +114,6 @@ silver_df = typed_df.filter(
 
 silver_df.writeTo(TABLE_FQN).using("iceberg").tableProperty(
     "format-version", "2"
-).createOrReplace()
+).partitionedBy(months(col("trade_date"))).createOrReplace()
 
 job.commit()

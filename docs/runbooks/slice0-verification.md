@@ -55,6 +55,17 @@ SELECT * FROM silver.stock ORDER BY symbol, trade_date LIMIT 20;
 
 **參考結果**（2026-07-31 執行，3 檔 symbol、262 個交易日）：Bronze/Silver 筆數皆為 786，各 symbol 均為 262 筆，品質違規與重複列皆為 0。
 
+## Partition 驗證（spec §4 item 9）
+
+```sql
+-- Silver/Gold 應該看得到 month(...) partition spec；Bronze 因 date 欄位是
+-- string 型別不宣告 partition（見 ADR-0003），SHOW CREATE TABLE 不會有 PARTITIONED BY
+SHOW CREATE TABLE silver.stock;
+SHOW CREATE TABLE gold.monthly_ohlcv;
+```
+
+**參考結果**（2026-07-31 執行）：`silver.stock` 為 `PARTITIONED BY (month(trade_date))`，`gold.monthly_ohlcv` 為 `PARTITIONED BY (month(year_month))`；重跑 Silver/Gold 套用新 partition spec 後，筆數（786/39）與品質規則檢查結果與 partition 前一致，partition 只影響實體檔案佈局，不影響查詢結果。
+
 ## Gold 驗證
 
 ```sql

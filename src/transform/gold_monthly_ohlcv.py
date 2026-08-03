@@ -26,8 +26,12 @@ src/transform/silver_stock.py's docstring for the reasoning) — spec §5
 label "append" here likewise means "no row-level upsert", not literal Spark
 append.
 
-No partitionedBy: partition design is spec item 9, deferred, same as
-Bronze/Silver.
+Partitioned by months(year_month) (spec item 9): year_month is already a
+DateType column (the first day of each month), so this is really just
+identity partitioning at month grain — every row in a partition already
+shares the same year_month value. Matches Silver's partition granularity;
+see docs/architecture/adr/0003-append-vs-overwrite.md for the full
+per-layer partition rationale (including why Bronze has none).
 """
 
 import sys
@@ -36,7 +40,7 @@ from awsglue.context import GlueContext
 from awsglue.job import Job
 from awsglue.utils import getResolvedOptions
 from pyspark.context import SparkContext
-from pyspark.sql.functions import col, max_by, min_by, trunc
+from pyspark.sql.functions import col, max_by, min_by, months, trunc
 from pyspark.sql.functions import max as spark_max
 from pyspark.sql.functions import min as spark_min
 from pyspark.sql.functions import sum as spark_sum
@@ -70,6 +74,6 @@ gold_df = monthly_df.groupBy("symbol", "year_month").agg(
 
 gold_df.writeTo(TABLE_FQN).using("iceberg").tableProperty(
     "format-version", "2"
-).createOrReplace()
+).partitionedBy(months(col("year_month"))).createOrReplace()
 
 job.commit()

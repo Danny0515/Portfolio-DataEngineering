@@ -89,8 +89,8 @@
 | 6 | Silver 轉換 | PySpark 讀 Bronze，去重、型別校正（price → decimal、date → date type）、標準化欄位命名 | Iceberg table `silver.stock` | |
 | 7 | Gold 聚合 | PySpark 做月頻 OHLCV 彙總（Silver 每個 (symbol, trade_date) 已固定 1 列，若仍照日粒度分組聚合會是無意義的 no-op，故改採月彙總以驗證真正的 groupBy 邏輯） | Iceberg table `gold.monthly_ohlcv` | |
 | 8 | 查詢驗證 | Athena 查詢 Gold 層，人工核對筆數與數字正確性 | 驗證紀錄 | |
-| 9 | Partition 設計 | 依交易日期（如 `date` 或 `year/month`）切 partition | table partition spec | |
-| 10 | 文件產出 | 依 execution-roadmap.md §2 Slice0 要求 | 見下方 §9 | |
+| 9 | Partition 設計 | 依交易日期（如 `date` 或 `year/month`）切 partition。Silver/Gold 用 `months(...)` 月粒度 partition；Bronze 因 `date` 欄位是 string 型別不宣告 partition（理由見 ADR-0003） | table partition spec | ✅ |
+| 10 | 文件產出 | 依 execution-roadmap.md §2 Slice0 要求 | 見下方 §9 | ✅ |
 
 ---
 
@@ -120,7 +120,7 @@ Slice 0 **不引入品質框架**，僅做最基本的程式內檢查（留待 S
 - [ ] 資料端到端從 raw landing 流到 Gold 層，過程無需人工中途介入
 - [ ] Athena（或本地查詢引擎）可查到 Gold 層資料，且筆數與 generator 產出的原始資料一致
 - [ ] Bronze 層資料可被重跑（reprocess）而不影響 Silver/Gold 的正確性
-- [ ] 上述 §9 文件皆已產出
+- [x] 上述 §9 文件皆已產出
 
 ---
 
@@ -138,4 +138,4 @@ Slice 0 **不引入品質框架**，僅做最基本的程式內檢查（留待 S
 
 - `docs/architecture/adr/0001-use-iceberg.md` — 為何用 Iceberg 而非直接 Parquet on S3
 - `docs/architecture/adr/0002-medallion-layering.md` — 為何分三層
-- Decision Log：append vs overwrite 的取捨（本文件 §5 已先記錄初步理由，正式 ADR 待補）
+- `docs/architecture/adr/0003-append-vs-overwrite.md` — append vs 全量覆寫的取捨與 partition 設計（正式 ADR，取代原本本文件 §5 的初步理由）

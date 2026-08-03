@@ -21,7 +21,7 @@ Bronze/Silver/Gold 三層都採用 Apache Iceberg 作為 table format，以 AWS 
 - Snapshot isolation / 原子寫入：每次 commit 是一個新 snapshot，讀者不會看到寫入中途的中間狀態；純 Parquet on S3 沒有這層保證，並行讀寫容易看到不一致資料
 - 為 Slice1 WAP Gate 鋪路：WAP（Write-Audit-Publish）模式仰賴「先寫入、驗證通過後才讓下游可見」，Iceberg 的 snapshot/time-travel（`AS OF VERSION`）與 branch/tag 機制是實作這個 pattern 的天然基礎；用純 Parquet 得自己刻意設計 staging 區＋rename 這類替代方案
 - 與 AWS Glue 原生整合：Glue 5.0 透過 `--datalake-formats=iceberg` 原生支援，不需自行管理 jar，串接 Glue Data Catalog 幾乎零額外設定成本（見 `infra/environments/dev/glue.tf` 的 `--conf` 設定）
-- Partition 彈性：Iceberg 的 hidden partitioning 讓 partition 策略可以晚點決定、事後用 `ALTER TABLE ... ADD PARTITION FIELD` 補上，不用重寫既有資料（呼應 spec item 9 刻意延後的決策）
+- Partition 彈性：Iceberg 的 hidden partitioning 讓 Silver/Gold 可以直接對已型別校正的 `date` 欄位宣告 `months(...)` partition，不需要手寫分區欄位或重寫既有資料（實際採用方案見 [ADR-0003](0003-append-vs-overwrite.md)：Silver/Gold 用月粒度 partition，Bronze 因 `date` 欄位是 string 型別而不宣告 partition）
 
 ## 影響 (Consequences)
 

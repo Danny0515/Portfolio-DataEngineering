@@ -56,7 +56,15 @@ Silver 是整個湖倉「什麼算乾淨資料」規則的唯一集中維護點�
 
 > **範圍限制**：這個「Bronze=append／Silver,Gold=全量覆寫」的寫入模式策略，適用對象是像市場行情這種「批次、不可變歷史事實」的資料域。Slice 2 的交易資料走 CDC + upsert，屬於不同的寫入模式策略，屆時會有自己的 ADR/spec，不套用本節規則。
 
-## 8.6 目前已實作的具體案例：Market Data / Stock（Slice0）
+## 8.6 Partition 設計
+
+- **原則**：partition 粒度依實際資料量決定，避免產生過多小 partition。目前資料量（3 檔 symbol × 約 1 年交易日 ≈ 1000 列量級）選擇月粒度，不用日粒度。
+- **Silver/Gold**：用 Iceberg 的 hidden partitioning，`partitionedBy(months(<date 欄位>))`——兩層的日期欄位（`trade_date`／`year_month`）都已經是型別校正後的 `date` type，可以直接套用 `months()` transform。
+- **Bronze 不宣告 partition**：Bronze 的日期欄位是 `StringType`（見 8.2 全字串讀取設計），Iceberg 的 `months()`/`days()`/`years()` 只能套用在 date/timestamp 型別，無法直接用在字串上；要繞過這個限制得用字串前綴截斷（如 `truncate(7, date)`）這類變通手法，但 Bronze 資料量小、設計哲學是「盡量薄、不做非必要的事」，不需要為了 partition 引入這種手法。
+- **透過 `createOrReplace()` 自然生效**：Silver/Gold 每次執行都是全量覆寫（見 8.5），`partitionedBy(...)` 直接寫進 `.writeTo(...)` chain 即可在下次執行時套用新的 partition spec，不需要額外的 `ALTER TABLE` 遷移步驟。
+- 完整決策紀錄見 [ADR-0003](../architecture/adr/0003-append-vs-overwrite.md)。
+
+## 8.7 目前已實作的具體案例：Market Data / Stock（Slice0）
 
 上面幾節是通用架構規則，本節整理「目前唯一已實作」的具體實例，方便對照抽象規則與實際程式碼；實際執行流程圖見 [06. Runtime View](06_runtime_view.md)：
 
@@ -66,10 +74,9 @@ Silver 是整個湖倉「什麼算乾淨資料」規則的唯一集中維護點�
 | Silver | `silver.stock` | [`src/transform/silver_stock.py`](../../src/transform/silver_stock.py) |
 | Gold | `gold.monthly_ohlcv` | [`src/transform/gold_monthly_ohlcv.py`](../../src/transform/gold_monthly_ohlcv.py) |
 
-未來新增資料域（如期貨、交易資料、使用者行為）時，應該先參考 8.1~8.5 的通用規則設計三層職責，再視該資料域的特性（自然鍵、型別、聚合粒度、寫入模式策略）填入具體實作，不需要重新討論分層邊界本身。
+未來新增資料域（如期貨、交易資料、使用者行為）時，應該先參考 8.1~8.6 的通用規則設計三層職責，再視該資料域的特性（自然鍵、型別、聚合粒度、寫入模式策略、partition 粒度）填入具體實作，不需要重新討論分層邊界本身。
 
-## 8.7 與 ADR 的關係 / 尚未涵蓋的範圍
+## 8.8 與 ADR 的關係 / 尚未涵蓋的範圍
 
-- 本章是 ADR-0002 決策的落地細節，取捨理由仍以 ADR-0002 為準，本章不重複展開。
-- **Partition 設計不在本章範圍**：Bronze/Silver/Gold 目前都沒有宣告 `partitionedBy(...)`，這是 [spec §4 item 9](../specs/slice0-batch-market-data.md) 的範圍，留待之後一次處理三層時再補一節。
-- **Athena 查詢驗證**（spec §4 item 8）也不在本章範圍，是實際部署後的驗證步驟，不是轉換邏輯的一部分。
+- 本章是 ADR-0002（分層職責）與 ADR-0003（寫入模式、partition 設計）決策的落地細節，取捨理由仍以這兩份 ADR 為準，本章不重複展開。
+- **Athena 查詢驗證**（spec §4 item 8）不在本章範圍，是實際部署後的驗證步驟，不是轉換邏輯的一部分，見 [docs/runbooks/slice0-verification.md](../runbooks/slice0-verification.md)。

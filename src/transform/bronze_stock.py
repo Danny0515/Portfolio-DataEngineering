@@ -62,9 +62,15 @@ except AnalysisException:
 if table_exists:
     bronze_df.writeTo(TABLE_FQN).append()
 else:
-    # No partitionedBy: partition design is spec item 9, deferred. Iceberg's
-    # hidden partitioning lets it be added later via ALTER TABLE ... ADD
-    # PARTITION FIELD without rewriting data already landed here.
+    # No partitionedBy, and this is final (spec item 9), not deferred:
+    # Bronze's `date` column is StringType (inferSchema=false, above), and
+    # Iceberg's date-based hidden-partition transforms (months/days/years)
+    # only apply to date/timestamp columns — not string. Adding a partition
+    # here would mean a string-prefix transform (e.g. truncate), which is
+    # a workaround Bronze's thin, provenance-only design doesn't need at
+    # this data volume. Silver/Gold partition by months(...) on their real
+    # date-typed columns instead — see
+    # docs/architecture/adr/0003-append-vs-overwrite.md.
     bronze_df.writeTo(TABLE_FQN).using("iceberg").tableProperty(
         "format-version", "2"
     ).create()

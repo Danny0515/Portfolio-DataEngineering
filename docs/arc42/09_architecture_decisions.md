@@ -17,3 +17,4 @@
 | --- | --- | --- |
 | [ADR-0001](../architecture/adr/0001-use-iceberg.md) | 為何用 Iceberg 而非直接 Parquet on S3 | ✅ `Accepted` |
 | [ADR-0002](../architecture/adr/0002-medallion-layering.md) | 為何分 Bronze/Silver/Gold 三層 | ✅ `Accepted` |
+| [ADR-0003](../architecture/adr/0003-append-vs-overwrite.md) | 批次管線的寫入模式（Append vs 全量覆寫）與 Partition 設計 | ✅ `Accepted` |
