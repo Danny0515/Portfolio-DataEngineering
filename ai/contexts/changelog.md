@@ -112,5 +112,25 @@
 
 ### Next Steps
 
-- [ ] (延續 Session 003) §4 項目 9：Partition 設計——Bronze/Silver/Gold 三層皆尚未宣告 `partitionedBy(...)`，留待之後一次處理三層（含 Bronze 用一次性 Athena DDL `ALTER TABLE ADD PARTITION FIELD` 回溯）
 - [ ] 精簡 `docs/arc42/08_concepts.md`
+
+---
+
+## Session 005 — 2026-08-05
+
+- **Engineer**: Danny
+- **Role**: Data Engineer
+- **LLM Used**: Claude Code (claude-sonnet-5)
+- **Module**: slice0-docs-cleanup
+
+### Completed
+
+- [x] (延續 Session 004 Next Steps) 精簡 `docs/arc42/08_concepts.md`：新增章節目錄（8.1~8.8）方便導覽，並縮短部分段落的重複描述（如 8.2 Bronze 職責邊界、8.3 Silver 型別校正範例）；刻意不過度精簡——保留原始設計動機與理由的完整說明，因為後續資料域擴充（期貨、交易資料等）時仍會頻繁變動這份文件，過度精簡會讓人看不出「當初為什麼這樣設計」
+
+### Related ADRs
+
+- 無新增 ADR（本次為既有 ADR-0002/ADR-0003 落地細節的文件整理，非新決策）
+
+### Next Steps
+
+- [ ] 開始 Slice 1 §4 項目 4.1~4.9 的實作（依 `docs/specs/slice1-quality-contract.md`）

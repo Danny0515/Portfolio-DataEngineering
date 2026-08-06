@@ -121,6 +121,7 @@ Bronze → Silver ──▶ [Write] 寫入 Iceberg 暫存分支
 - **檢核該放哪一層?** —— 為何放在 Bronze→Silver 之間而非最後。
 
 **文件產出**:
+- `docs/specs/slice1-quality-contract.md`(本 Slice 的 Spec)
 - `docs/patterns/wap-quality-gate.md`(Pattern Card)
 - `docs/contracts/market-data.contract.yaml`(第一份生效契約)
 - `docs/architecture/adr/0003-wap-quality-gate.md`
@@ -270,3 +271,4 @@ MSK (trade + market events)
 | --- | --- | --- |
 | 2026-07-17 | 新增「使用方式」說明 + 建立本 Changelog | 釐清本文件應作為實作期回頭查閱 Slice 全貌的參考,並補上可回溯的修訂紀錄機制 |
 | 2026-07-17 | Slice 0「資料流」與「具體技術」 | 依 slice0-batch-market-data.md §3 定案結論同步:資料來源改為自產模擬資料,運算引擎定為 Spark(不用 dbt) |
+| 2026-08-05 | Slice 1「文件產出」 | 補齊遺漏的 spec 檔名,格式對齊 Slice 0/2 |
