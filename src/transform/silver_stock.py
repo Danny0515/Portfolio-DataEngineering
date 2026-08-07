@@ -1,38 +1,23 @@
 """Silver cleanse/standardize for Slice0: dedup, type-correct, rename Bronze OHLCV.
 
-Runs as an AWS Glue Job (GlueVersion 5.0, --datalake-formats=iceberg), same
-catalog wiring convention as Bronze (see infra/environments/dev/glue.tf and
-src/transform/bronze_stock.py) — no spark.sql.catalog.* configs here.
+Runs as an AWS Glue Job; catalog wiring (spark.sql.catalog.*) lives in
+infra/environments/dev/glue.tf, not here.
 
-Every run reads the FULL Bronze table and writes with createOrReplace(), not
-.append(). This is a deliberate departure from Bronze's create-or-append
-pattern: Bronze is allowed to accumulate duplicate rows on reprocess (see
-docs/architecture/adr/0002-medallion-layering.md), and those duplicates must
-be fully absorbed here rather than leaking into Silver. If Silver appended
-its deduped batch onto whatever was already there, re-running Silver itself
-would double-count on every run. A full recompute + overwrite is the only
-way to satisfy spec §7's "Bronze can be reprocessed without corrupting
-Silver/Gold" acceptance criterion. Spec §5 labels this write mode "append"
-to mean "no row-level MERGE/upsert" (contrasted with Slice 2's upsert) — not
-literal Spark append semantics.
+Every run full-recomputes from Bronze rather than .append()-ing: Bronze
+accumulates duplicate rows on reprocess (docs/architecture/adr/0002-medallion-layering.md)
+and those must be fully absorbed here, not doubled on every rerun — see
+docs/architecture/adr/0003-append-vs-overwrite.md for the full rationale
+(also covers why Silver/Gold partition by months(...) and Bronze doesn't).
 
-Partitioned by months(trade_date) (spec item 9): trade_date is a proper
-DateType column here (unlike Bronze's string date), so Iceberg's
-date-based hidden-partition transform applies directly. Month granularity
-matches the actual data volume (a handful of symbols x ~1 year of trading
-days) — day-level partitioning would be needlessly fine-grained. See
-docs/architecture/adr/0003-append-vs-overwrite.md for why Bronze, in
-contrast, has no partition spec at all.
+Bronze lands every column as StringType, so Silver owns all type parsing.
+Processing order is dedup -> cast -> quality filter: casting first means the
+filter runs on real numeric/date comparisons, not Spark's implicit
+string-to-numeric coercion.
 
-Bronze now lands every column as StringType (inferSchema=false, see
-src/transform/bronze_stock.py), so Silver owns 100% of type parsing —
-not just price/date as before, but also volume. Processing order is dedup
--> type cast -> quality filter: casting first means the quality filter runs
-against properly-typed columns instead of relying on Spark's implicit
-string-to-numeric comparison coercion. A cast of an invalid numeric literal
-(e.g. spec §6's dirty "empty_field" injection, an empty string) evaluates
-to null under Spark's default (non-ANSI) cast semantics, which the
-isNotNull() checks below then drop — no special-casing needed.
+WAP write stage (docs/specs/slice1-quality-contract.md §4 item 3): from the
+2nd run onward this writes to Iceberg's `staging` branch instead of main.
+Audit (item 4) and Publish/fast-forward (item 5) aren't implemented yet, so
+every write currently lands on staging and stays there.
 """
 
 import sys
@@ -41,8 +26,9 @@ from awsglue.context import GlueContext
 from awsglue.job import Job
 from awsglue.utils import getResolvedOptions
 from pyspark.context import SparkContext
-from pyspark.sql.functions import col, months, row_number, to_date
+from pyspark.sql.functions import col, lit, months, row_number, to_date
 from pyspark.sql.types import DecimalType, IntegerType
+from pyspark.sql.utils import AnalysisException
 from pyspark.sql.window import Window
 
 args = getResolvedOptions(
@@ -59,14 +45,12 @@ job.init(args["JOB_NAME"], args)
 CATALOG = "glue_catalog"
 SOURCE_FQN = f"{CATALOG}.{args['SOURCE_DB']}.{args['SOURCE_TABLE']}"
 TABLE_FQN = f"{CATALOG}.{args['ICEBERG_DB']}.{args['ICEBERG_TABLE']}"
+STAGING_BRANCH = "staging"
 
 bronze_df = spark.table(SOURCE_FQN)
 
-# Dedup key is (symbol, date) per spec §6. Tie-break keeps the row from the
-# most recent Bronze run (ingest_time desc); source_file is a secondary sort
-# key only to make row_number() deterministic when ingest_time ties within
-# the same Bronze run (current_timestamp() is evaluated once per query, so
-# every row from one Bronze run shares the same ingest_time).
+# Ties (same ingest_time, since current_timestamp() is per-query) broken by
+# source_file so row_number() stays deterministic.
 dedup_window = Window.partitionBy("symbol", "date").orderBy(
     col("ingest_time").desc(), col("source_file").desc()
 )
@@ -76,13 +60,6 @@ deduped_df = (
     .drop("_rank")
 )
 
-# Type correction (spec item 6): every column from Bronze is a string, so
-# all of open/high/low/close/volume/date need an explicit cast here — none
-# of this is free from Bronze's reader anymore. Column standardization:
-# `date` -> `trade_date` (avoids the generic bare name once this table is
-# joined against others). Bronze's provenance columns (ingest_time,
-# source_file) are intentionally not carried forward — spec §5 describes
-# Silver's content as pure OHLCV, no lineage columns.
 # TODO 型態之後改由外部傳入(e.g. 數據字典)
 typed_df = deduped_df.select(
     col("symbol"),
@@ -95,11 +72,6 @@ typed_df = deduped_df.select(
 )
 
 # Data quality rules (spec §6): no negative/null OHLC prices, high >= low.
-# Runs after casting so these are real numeric/date comparisons, not
-# Spark's implicit string-to-numeric coercion. Dirty "empty_field"
-# injections become null during the cast above (caught by isNotNull());
-# dirty "negative_price" injections stay a valid, real negative number
-# (caught by the >= 0 checks).
 silver_df = typed_df.filter(
     col("open").isNotNull()
     & col("high").isNotNull()
@@ -112,8 +84,29 @@ silver_df = typed_df.filter(
     & (col("high") >= col("low"))
 )
 
-silver_df.writeTo(TABLE_FQN).using("iceberg").tableProperty(
-    "format-version", "2"
-).partitionedBy(months(col("trade_date"))).createOrReplace()
+try:
+    spark.sql(f"DESCRIBE TABLE {TABLE_FQN}")
+    table_exists = True
+except AnalysisException:
+    table_exists = False
+
+if table_exists:
+    # CREATE BRANCH IF NOT EXISTS is idempotent (no-op if staging already
+    # exists), so a rerun never resets staging's HEAD — main stays an
+    # ancestor of every staging snapshot even across rejected-Audit cycles,
+    # which item 5's future fast_forward depends on.
+    #
+    # overwrite(lit(True)), not createOrReplace(): only append()/overwrite()/
+    # overwritePartitions() resolve a `.branch_X` identifier suffix;
+    # createOrReplace() treats it as a literal table name and fails.
+    spark.sql(f"ALTER TABLE {TABLE_FQN} CREATE BRANCH IF NOT EXISTS {STAGING_BRANCH}")
+    silver_df.writeTo(f"{TABLE_FQN}.branch_{STAGING_BRANCH}").overwrite(lit(True))
+else:
+    # Bootstrap: main doesn't exist yet, so there's nothing for WAP to
+    # protect and no table for CREATE BRANCH to branch from. From the 2nd
+    # run onward this branch is dead code.
+    silver_df.writeTo(TABLE_FQN).using("iceberg").tableProperty(
+        "format-version", "2"
+    ).partitionedBy(months(col("trade_date"))).createOrReplace()
 
 job.commit()

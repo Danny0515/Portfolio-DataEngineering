@@ -165,3 +165,34 @@
 ### Notes
 
 > 品質規則刻意設計成 YAML 宣告式（`rules/*.yaml`）而非寫死在 Python，之後新增資料域只需新增一份 YAML，不用碰 `build_expectation_suite.py`。
+
+---
+
+## Session 007 — 2026-08-07
+
+- **Engineer**: Danny
+- **Role**: Data Engineer
+- **LLM Used**: Claude Code (claude-sonnet-5)
+- **Module**: slice1-wap-staging
+
+### Completed
+
+- [x] Slice 1 §4 項目 3：`src/transform/silver_stock.py` 實作 WAP Write 階段——`table_exists` 判斷後，寫入 Iceberg `staging` branch（`ALTER TABLE ... CREATE BRANCH IF NOT EXISTS` + `.writeTo(...).overwrite(lit(True))`）取代直接覆寫 main；第一次執行（表不存在時）仍走原本 `createOrReplace()` 直接建表在 main（bootstrap，無資料可保護）
+- [x] `pyproject.toml` 新增 `pyspark`（對齊 Glue 5.0 = Spark 3.5.4）dev dependency；新增 `scripts/verify_wap_branch_write.py`——本機用簡化 schema + Iceberg **Hadoop catalog**（非 AWS）獨立驗證 branch 寫入機制，7 項斷言全數通過，包含證實 `createOrReplace()` 對 branch-qualified identifier 不適用、`CREATE BRANCH IF NOT EXISTS` 冪等性
+- [x] 依使用者要求，在真實 AWS Glue（`slice0-silver-stock` job，經 `terraform apply -target` 部署新版腳本、`dt-lab-long-term-mfa` MFA session）連續觸發兩輪，透過 Athena `$refs`/`$snapshots` metadata table 與 `FOR VERSION AS OF 'staging'` 查詢確認：**Glue Data Catalog + Iceberg 1.7.1 完整支援 branch 操作**，main 全程不受影響（786 筆、snapshot_id 不變），staging 兩輪各自新增 snapshot 且 parent lineage 正確銜接（第 2 輪 parent 接第 1 輪 staging，而非 main）——spec §3.2/§8 懸而未決的 Glue branch 支援度風險已解除，不需降級為手動 staging table
+- [x] 新增 `docs/runbooks/slice1-verification.md`：正式環境 WAP staging 驗證 runbook，含上述實測參考結果，並明訂本機 Hadoop catalog 僅供開發當下快速驗證邏輯、不具驗收效力，Slice 1 驗收一律以 Glue 實測結果為準；同步在 `docs/runbooks/slice0-verification.md` Silver 驗證段落補注記，說明「每次執行都直接寫 main」的假設在 WAP 導入後不再成立
+- [x] `docs/specs/slice1-quality-contract.md` §4 項目 3 標記完成
+- [x] 精簡 `silver_stock.py` 累積註解（多個 session 疊加後 172 行→113 行）：移除已可從程式碼本身看出、或與既有 ADR 重複的說明，只保留真正影響決策的關鍵註解（如 `CREATE BRANCH IF NOT EXISTS` 冪等性為何重要、為何用 `overwrite()` 而非 `createOrReplace()`）
+
+### Related ADRs
+
+- 無新增 ADR。原先 spec §8 風險預留「若 Glue Catalog 不支援 branch 操作，需降級為手動 staging table 並留 ADR」——本次實測確認 Glue Catalog 完整支援，未觸發降級條件，故不需要 ADR；WAP Gate 的正式 ADR（`0004-wap-quality-gate.md`，注意編號需避開既有 `0003-append-vs-overwrite.md`）仍留待項目 9
+
+### Next Steps
+
+- [ ] (延續 Session 006，範圍縮小為) Slice 1 §4 項目 4-9：Audit 執行、Publish/擋下邏輯、稽核紀錄落地、Data Contract 撰寫（`market-data.contract.yaml`）、端到端驗證、文件產出（Pattern Card + ADR + Decision Log）
+- [ ] (延續 Session 006) 視 §4 項目 4-6 完成進度，補寫 `docs/arc42/08_concepts.md` 的「Data Quality 設計原則」一節（WAP Gate 尚未完整接進 pipeline，暫緩）
+
+### Notes
+
+> 本機用 Hadoop catalog 驗證的是「Iceberg branch 寫入機制本身」，跟 spec §3.2/§8 真正要問的「Glue Data Catalog 這個 catalog-impl 支不支援 branch」是兩件分開的事，前者不能替代後者——這點在本機驗證完成、使用者主動要求「直接測試 Glue 是否可行」後才補上，也因此在驗證腳本與 runbook 裡都刻意標註兩者的差異與各自涵蓋範圍，並在 runbook 中明訂為 Slice 1 階段往後的驗收慣例。

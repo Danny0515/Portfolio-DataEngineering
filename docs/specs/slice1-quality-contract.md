@@ -99,7 +99,7 @@ Bronze (Iceberg, append 原樣落地 — 沿用 Slice 0，不變動)
 | --- | --- | --- | --- | --- |
 | 1 | 髒資料注入開關 | 依 §3.3 決定，擴充 generator 或新增 script | 可產生違反 §6 規則的資料 | ✅ |
 | 2 | 品質規則定義 | 用 §3.1 選定工具，定義 §6 的檢核規則 | Expectation Suite / Soda check YAML | ✅ |
-| 3 | WAP staging 機制 | 依 §3.2 決定，實作 Write 階段（寫入 staging） | staging branch/table | |
+| 3 | WAP staging 機制 | 依 §3.2 決定，實作 Write 階段（寫入 staging） | staging branch/table | ✅ |
 | 4 | Audit 執行 | 對 staging 資料跑品質規則，產出通過/失敗結果 | 檢核結果（pass/fail + 明細） | |
 | 5 | Publish / 擋下邏輯 | 通過 → merge 到正式 Silver；失敗 → 不 merge + 寫入稽核紀錄 | 正式 `silver.stock` 更新 或 擋下紀錄 | |
 | 6 | 稽核紀錄落地 | 被擋下的批次與觸犯規則寫入可查詢的地方（表或檔案） | 稽核紀錄（Athena 可查） | |
