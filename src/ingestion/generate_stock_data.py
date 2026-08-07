@@ -26,7 +26,19 @@ BASE_PRICES = {
 }
 DEFAULT_BASE_PRICE = 500.0
 
-DIRTY_KINDS = ["negative_price", "empty_field", "high_lt_low", "duplicate"]
+INVALID_SYMBOLS = ["9999", "0000", "ABCD"]
+
+# One kind per §6 rule dimension (docs/specs/slice1-quality-contract.md):
+# empty_field -> completeness; negative_price/high_lt_low/invalid_date -> validity;
+# duplicate -> uniqueness; invalid_symbol -> consistency.
+DIRTY_KINDS = [
+    "negative_price",
+    "empty_field",
+    "high_lt_low",
+    "duplicate",
+    "invalid_symbol",
+    "invalid_date",
+]
 
 
 def parse_args():
@@ -42,6 +54,11 @@ def parse_args():
         "--start-date",
         default=None,
         help="YYYY-MM-DD; defaults to (today - --years)",
+    )
+    parser.add_argument(
+        "--end-date",
+        default=None,
+        help="YYYY-MM-DD; requires --start-date; defaults to today when omitted",
     )
     parser.add_argument(
         "--years",
@@ -69,7 +86,10 @@ def parse_args():
         default=42,
         help="Random seed, for reproducible output",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.end_date and not args.start_date:
+        parser.error("--end-date requires --start-date")
+    return args
 
 
 def trading_days(start: date, end: date):
@@ -102,12 +122,16 @@ def inject_dirty(row: dict, rng: random.Random) -> list:
         field = rng.choice(["open", "high", "low", "close"])
         dirty[field] = -abs(dirty[field])
     elif kind == "empty_field":
-        field = rng.choice(["open", "high", "low", "close", "volume"])
+        field = rng.choice(FIELDNAMES)
         dirty[field] = ""
     elif kind == "high_lt_low":
         dirty["high"] = dirty["low"] - 1
     elif kind == "duplicate":
         return [row, dict(row)]
+    elif kind == "invalid_symbol":
+        dirty["symbol"] = rng.choice(INVALID_SYMBOLS)
+    elif kind == "invalid_date":
+        dirty["date"] = dirty["date"].replace("-", "/")
     return [dirty]
 
 
@@ -118,7 +142,7 @@ def main():
 
     if args.start_date:
         start = date.fromisoformat(args.start_date)
-        end = date.today()
+        end = date.fromisoformat(args.end_date) if args.end_date else date.today()
     else:
         end = date.today()
         start = end - timedelta(days=round(args.years * 365))

@@ -1,0 +1,100 @@
+# Declarative quality rules for the Silver `stock` table, per
+# docs/specs/slice1-quality-contract.md §6. Loaded by build_expectation_suite.py
+# into Great Expectations objects — add/edit a rule here, not in Python.
+#
+# Columns match Silver's post-cast schema (src/transform/silver_stock.py
+# typed_df), not the raw/spec-generic names: `date` is renamed `trade_date`.
+suite_name: silver_stock
+
+rules:
+  # --- 完整性 (Completeness): all 7 columns not null ---
+  - dimension: completeness
+    expectation: expect_column_values_to_not_be_null
+    column: symbol
+    notes: "完整性: symbol 不得為 null"
+
+  - dimension: completeness
+    expectation: expect_column_values_to_not_be_null
+    column: trade_date
+    notes: >-
+      完整性: date 不得為 null。同時涵蓋有效性規則「date 需為合法格式」——
+      Silver 用 to_date() 轉型（見 silver_stock.py），非 ANSI 模式下無法解析的
+      日期字串（例如注入的 invalid_date 斜線格式）會直接轉成 null，因此格式
+      不合法會反映在這條 not-null 規則上，不需要額外的格式檢查。
+
+  - dimension: completeness
+    expectation: expect_column_values_to_not_be_null
+    column: open
+    notes: "完整性: open 不得為 null"
+
+  - dimension: completeness
+    expectation: expect_column_values_to_not_be_null
+    column: high
+    notes: "完整性: high 不得為 null"
+
+  - dimension: completeness
+    expectation: expect_column_values_to_not_be_null
+    column: low
+    notes: "完整性: low 不得為 null"
+
+  - dimension: completeness
+    expectation: expect_column_values_to_not_be_null
+    column: close
+    notes: "完整性: close 不得為 null"
+
+  - dimension: completeness
+    expectation: expect_column_values_to_not_be_null
+    column: volume
+    notes: "完整性: volume 不得為 null"
+
+  # --- 有效性 (Validity): non-negative prices + high >= low ---
+  - dimension: validity
+    expectation: expect_column_values_to_be_between
+    column: open
+    kwargs:
+      min_value: 0
+    notes: "有效性: open 不得負值"
+
+  - dimension: validity
+    expectation: expect_column_values_to_be_between
+    column: high
+    kwargs:
+      min_value: 0
+    notes: "有效性: high 不得負值"
+
+  - dimension: validity
+    expectation: expect_column_values_to_be_between
+    column: low
+    kwargs:
+      min_value: 0
+    notes: "有效性: low 不得負值"
+
+  - dimension: validity
+    expectation: expect_column_values_to_be_between
+    column: close
+    kwargs:
+      min_value: 0
+    notes: "有效性: close 不得負值"
+
+  - dimension: validity
+    expectation: expect_column_pair_values_a_to_be_greater_than_b
+    kwargs:
+      column_A: high
+      column_B: low
+      or_equal: true
+    notes: "有效性: high >= low"
+
+  # --- 唯一性 (Uniqueness) ---
+  - dimension: uniqueness
+    expectation: expect_compound_columns_to_be_unique
+    kwargs:
+      column_list: [symbol, trade_date]
+    notes: "唯一性: (symbol, trade_date) 不得重複"
+
+  # --- 一致性 (Consistency) ---
+  - dimension: consistency
+    expectation: expect_column_values_to_be_in_set
+    column: symbol
+    kwargs:
+      value_set: ["2330", "2454", "3653"]
+    notes: "一致性: symbol 需為合法代號（2330/2454/3653），不接受未知代號"

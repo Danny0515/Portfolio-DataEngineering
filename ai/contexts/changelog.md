@@ -134,3 +134,34 @@
 ### Next Steps
 
 - [ ] 開始 Slice 1 §4 項目 4.1~4.9 的實作（依 `docs/specs/slice1-quality-contract.md`）
+
+---
+
+## Session 006 — 2026-08-05
+
+- **Engineer**: Danny
+- **Role**: Data Engineer
+- **LLM Used**: Claude Code (claude-sonnet-5)
+- **Module**: slice1-quality-foundation
+
+### Completed
+
+- [x] (延續 Session 005 Next Step，部分完成) Slice 1 §4 項目 1：擴充 `src/ingestion/generate_stock_data.py` 髒資料注入，新增至 6 種類型對應 §6 四個品質維度（completeness/validity×3/uniqueness/consistency），並新增 `--end-date` 參數方便產生指定區間的測試批次
+- [x] Slice 1 §4 項目 2：建立 GX（Great Expectations）基底——`src/quality/build_expectation_suite.py`（YAML 規則 → GX ExpectationSuite 的通用 loader，無 table-specific 邏輯）+ `src/quality/rules/silver_stock.yaml`（14 條宣告式規則，依完整性/有效性/唯一性/一致性四維度分組，對應 §6）+ GX 專案骨架（`great_expectations.yml`、產出的 `expectations/silver_stock.json`、自訂 data docs 樣式、`.gitignore` 排除 `uncommitted/`）
+- [x] 新增 `tests/quality/test_build_expectation_suite.py`：以 ephemeral pandas context 執行真實 GX validation（非 mock），涵蓋規則覆蓋率的結構測試，以及「6 種髒資料全被抓到」+「全乾淨批次通過」兩個端到端案例
+- [x] 新增 `docs/runbooks/generate-stock-data.md`，記錄 generator 參數說明（含新增的 `--end-date`、既有 `--dirty-rate`）與 Slice0/Slice1 雙重用途
+- [x] `pyproject.toml` 新增 `great-expectations`、`pytest` 依賴與 `[tool.pytest.ini_options]`（`testpaths=["tests"]`）
+- [x] `docs/specs/slice1-quality-contract.md` §4 項目 1-2 標記完成，狀態列更新為「§3 待確認事項已全數拍板」
+
+### Related ADRs
+
+- 無新增 ADR；spec §3.1（Great Expectations vs Soda Core）已拍板但尚無正式 ADR。**注意**：spec §9／execution-roadmap.md 預期的 ADR 檔名 `0003-wap-quality-gate.md` 已與現有 `0003-append-vs-overwrite.md`（Slice0）編號衝突，之後落筆需改用下一個可用編號（如 0004）
+
+### Next Steps
+
+- [ ] (延續 Session 005，範圍縮小為) Slice 1 §4 項目 3-9：WAP staging 機制（Iceberg branch）、Audit 執行、Publish/擋下邏輯、稽核紀錄落地、Data Contract 撰寫（`market-data.contract.yaml`）、端到端驗證、文件產出（Pattern Card + ADR + Decision Log）
+- [ ] 視 §4 項目 3-6 完成進度，補寫 `docs/arc42/08_concepts.md` 的「Data Quality 設計原則」一節（sync-arc42 本次判斷 WAP Gate 尚未接進 pipeline，暫緩）
+
+### Notes
+
+> 品質規則刻意設計成 YAML 宣告式（`rules/*.yaml`）而非寫死在 Python，之後新增資料域只需新增一份 YAML，不用碰 `build_expectation_suite.py`。

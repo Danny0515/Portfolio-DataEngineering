@@ -1,0 +1,164 @@
+{
+  "expectations": [
+    {
+      "id": "f024f8ce-f6af-472d-b91d-3ed371fc8db2",
+      "kwargs": {
+        "column": "symbol"
+      },
+      "meta": {},
+      "notes": "\u5b8c\u6574\u6027: symbol \u4e0d\u5f97\u70ba null",
+      "severity": "critical",
+      "type": "expect_column_values_to_not_be_null"
+    },
+    {
+      "id": "cf1f0702-4f36-49fe-bf41-33872dba0605",
+      "kwargs": {
+        "column": "trade_date"
+      },
+      "meta": {},
+      "notes": "\u5b8c\u6574\u6027: date \u4e0d\u5f97\u70ba null\u3002\u540c\u6642\u6db5\u84cb\u6709\u6548\u6027\u898f\u5247\u300cdate \u9700\u70ba\u5408\u6cd5\u683c\u5f0f\u300d\u2014\u2014 Silver \u7528 to_date() \u8f49\u578b\uff08\u898b silver_stock.py\uff09\uff0c\u975e ANSI \u6a21\u5f0f\u4e0b\u7121\u6cd5\u89e3\u6790\u7684 \u65e5\u671f\u5b57\u4e32\uff08\u4f8b\u5982\u6ce8\u5165\u7684 invalid_date \u659c\u7dda\u683c\u5f0f\uff09\u6703\u76f4\u63a5\u8f49\u6210 null\uff0c\u56e0\u6b64\u683c\u5f0f \u4e0d\u5408\u6cd5\u6703\u53cd\u6620\u5728\u9019\u689d not-null \u898f\u5247\u4e0a\uff0c\u4e0d\u9700\u8981\u984d\u5916\u7684\u683c\u5f0f\u6aa2\u67e5\u3002",
+      "severity": "critical",
+      "type": "expect_column_values_to_not_be_null"
+    },
+    {
+      "id": "5bc3a525-e3b8-4c1b-8b38-28742c756d48",
+      "kwargs": {
+        "column": "open"
+      },
+      "meta": {},
+      "notes": "\u5b8c\u6574\u6027: open \u4e0d\u5f97\u70ba null",
+      "severity": "critical",
+      "type": "expect_column_values_to_not_be_null"
+    },
+    {
+      "id": "5846c647-8ae1-409c-8088-87fc9c5fc3f9",
+      "kwargs": {
+        "column": "high"
+      },
+      "meta": {},
+      "notes": "\u5b8c\u6574\u6027: high \u4e0d\u5f97\u70ba null",
+      "severity": "critical",
+      "type": "expect_column_values_to_not_be_null"
+    },
+    {
+      "id": "c7acb4e2-d687-488c-92dc-cfabaec5eb4d",
+      "kwargs": {
+        "column": "low"
+      },
+      "meta": {},
+      "notes": "\u5b8c\u6574\u6027: low \u4e0d\u5f97\u70ba null",
+      "severity": "critical",
+      "type": "expect_column_values_to_not_be_null"
+    },
+    {
+      "id": "a48a70ae-583f-49ba-9c4e-a457eb0f54de",
+      "kwargs": {
+        "column": "close"
+      },
+      "meta": {},
+      "notes": "\u5b8c\u6574\u6027: close \u4e0d\u5f97\u70ba null",
+      "severity": "critical",
+      "type": "expect_column_values_to_not_be_null"
+    },
+    {
+      "id": "40117e82-fa6f-48c5-9b23-9fffa605dbe5",
+      "kwargs": {
+        "column": "volume"
+      },
+      "meta": {},
+      "notes": "\u5b8c\u6574\u6027: volume \u4e0d\u5f97\u70ba null",
+      "severity": "critical",
+      "type": "expect_column_values_to_not_be_null"
+    },
+    {
+      "id": "316f1f79-724d-4459-9190-8b9909b77818",
+      "kwargs": {
+        "column": "open",
+        "min_value": 0.0
+      },
+      "meta": {},
+      "notes": "\u6709\u6548\u6027: open \u4e0d\u5f97\u8ca0\u503c",
+      "severity": "critical",
+      "type": "expect_column_values_to_be_between"
+    },
+    {
+      "id": "0d77a939-8765-46b4-a89d-0c9980845dba",
+      "kwargs": {
+        "column": "high",
+        "min_value": 0.0
+      },
+      "meta": {},
+      "notes": "\u6709\u6548\u6027: high \u4e0d\u5f97\u8ca0\u503c",
+      "severity": "critical",
+      "type": "expect_column_values_to_be_between"
+    },
+    {
+      "id": "1511c993-5264-4b32-a2a1-544700eae6d2",
+      "kwargs": {
+        "column": "low",
+        "min_value": 0.0
+      },
+      "meta": {},
+      "notes": "\u6709\u6548\u6027: low \u4e0d\u5f97\u8ca0\u503c",
+      "severity": "critical",
+      "type": "expect_column_values_to_be_between"
+    },
+    {
+      "id": "dfc8b754-397a-487c-a6a0-cf484b4666f8",
+      "kwargs": {
+        "column": "close",
+        "min_value": 0.0
+      },
+      "meta": {},
+      "notes": "\u6709\u6548\u6027: close \u4e0d\u5f97\u8ca0\u503c",
+      "severity": "critical",
+      "type": "expect_column_values_to_be_between"
+    },
+    {
+      "id": "01add3f7-c9d2-486e-b7a9-ebfad21911cf",
+      "kwargs": {
+        "column_A": "high",
+        "column_B": "low",
+        "or_equal": true
+      },
+      "meta": {},
+      "notes": "\u6709\u6548\u6027: high >= low",
+      "severity": "critical",
+      "type": "expect_column_pair_values_a_to_be_greater_than_b"
+    },
+    {
+      "id": "a32b72b9-5354-48f7-9952-753cc66e8b97",
+      "kwargs": {
+        "column_list": [
+          "symbol",
+          "trade_date"
+        ]
+      },
+      "meta": {},
+      "notes": "\u552f\u4e00\u6027: (symbol, trade_date) \u4e0d\u5f97\u91cd\u8907",
+      "severity": "critical",
+      "type": "expect_compound_columns_to_be_unique"
+    },
+    {
+      "id": "426a334c-fc7b-44df-a00b-9a71872ed62b",
+      "kwargs": {
+        "column": "symbol",
+        "value_set": [
+          "2330",
+          "2454",
+          "3653"
+        ]
+      },
+      "meta": {},
+      "notes": "\u4e00\u81f4\u6027: symbol \u9700\u70ba\u5408\u6cd5\u4ee3\u865f\uff082330/2454/3653\uff09\uff0c\u4e0d\u63a5\u53d7\u672a\u77e5\u4ee3\u865f",
+      "severity": "critical",
+      "type": "expect_column_values_to_be_in_set"
+    }
+  ],
+  "id": "8d32d8cd-5710-47ed-a604-c0ba304d68cf",
+  "meta": {
+    "great_expectations_version": "1.19.1"
+  },
+  "name": "silver_stock",
+  "notes": null
+}
