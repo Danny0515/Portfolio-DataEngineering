@@ -124,7 +124,7 @@ Bronze → Silver ──▶ [Write] 寫入 Iceberg 暫存分支
 - `docs/specs/slice1-quality-contract.md`(本 Slice 的 Spec)
 - `docs/patterns/wap-quality-gate.md`(Pattern Card)
 - `docs/contracts/market-data.contract.yaml`(第一份生效契約)
-- `docs/architecture/adr/0003-wap-quality-gate.md`
+- `docs/architecture/adr/0004-wap-quality-gate.md`
 - Decision Log:選 Great Expectations vs Soda 的理由
 
 **完成定義 (DoD)**:故意灌一批壞資料,能被 Gate 擋下並告警;好資料正常 publish;契約檔納入版控。

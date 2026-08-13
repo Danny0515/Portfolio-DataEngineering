@@ -16,12 +16,22 @@ string-to-numeric coercion.
 
 WAP write stage (docs/specs/slice1-quality-contract.md §4 item 3): from the
 2nd run onward this writes to Iceberg's `staging` branch instead of main.
-Audit (item 4) and Publish/fast-forward (item 5) aren't implemented yet, so
-every write currently lands on staging and stays there.
+
+Audit (item 4, spike form per §8's GX-on-Spark-on-Glue verification plan):
+after the staging write, reads staging back and runs it through the Great
+Expectations suite built in item 2 (src/quality/gx/expectations/silver_stock.json,
+shipped alongside this script via Glue's --extra-files). Result is only
+printed to CloudWatch for now — Publish/fast-forward (item 5) and a queryable
+audit-record table (item 6) aren't implemented yet, so nothing is blocked or
+persisted based on the outcome.
 """
 
+import json
+import os
 import sys
+from pathlib import Path
 
+import great_expectations as gx
 from awsglue.context import GlueContext
 from awsglue.job import Job
 from awsglue.utils import getResolvedOptions
@@ -101,6 +111,27 @@ if table_exists:
     # createOrReplace() treats it as a literal table name and fails.
     spark.sql(f"ALTER TABLE {TABLE_FQN} CREATE BRANCH IF NOT EXISTS {STAGING_BRANCH}")
     silver_df.writeTo(f"{TABLE_FQN}.branch_{STAGING_BRANCH}").overwrite(lit(True))
+
+    # Audit (item 4 spike): validate staging's current contents against the
+    # Silver quality suite. --extra-files' landing directory wasn't confirmed
+    # ahead of time, so cwd is logged to diagnose Path("silver_stock_suite.json")
+    # if it doesn't resolve.
+    print(f"[Audit] cwd={os.getcwd()}")
+    staging_df = spark.table(f"{TABLE_FQN}.branch_{STAGING_BRANCH}")
+    suite_data = json.loads(Path("silver_stock_suite.json").read_text())
+    suite = gx.ExpectationSuite(**suite_data)
+
+    gx_context = gx.get_context(mode="ephemeral")
+    data_source = gx_context.data_sources.add_spark("glue_spark")
+    asset = data_source.add_dataframe_asset("staging_asset")
+    batch_definition = asset.add_batch_definition_whole_dataframe("staging_batch")
+    batch = batch_definition.get_batch(batch_parameters={"dataframe": staging_df})
+    audit_result = batch.validate(suite)
+
+    print(f"[Audit] staging validation success={audit_result.success}")
+    for r in audit_result.results:
+        if not r.success:
+            print(f"[Audit] FAILED: {r.expectation_config.type} kwargs={r.expectation_config.kwargs}")
 else:
     # Bootstrap: main doesn't exist yet, so there's nothing for WAP to
     # protect and no table for CREATE BRANCH to branch from. From the 2nd

@@ -22,6 +22,10 @@
 - RULE-002：AWS CLI 操作一律優先嘗試 MFA 長期憑證（`dt-lab-long-term`），SSH Bastion 降級為連線失敗時的備援手段
 - RULE-003：IAM 權限設定一律遵照 AWS 官方 best practice，與 `plan.md` 專案需求衝突時才跟使用者討論特例並留下 ADR
 
+## 程式碼風格 (Coding Style)
+
+程式碼與測試撰寫風格規範記錄於 [ai/contexts/coding-style.md](ai/contexts/coding-style.md)。**只在實際撰寫/修改程式碼或測試時才需要讀取該文件**。
+
 ## 文件治理規則 (Document Governance)
 
 本專案的頂層規劃文件為 [plan.md](plan.md)（藍圖/北極星）與 [execution-roadmap.md](execution-roadmap.md)（執行路線/Slice 順序）。兩者的維護契約定義在 execution-roadmap.md §5：

@@ -24,6 +24,16 @@ resource "aws_s3_object" "silver_script" {
   etag   = filemd5("${path.module}/../../../src/transform/silver_stock.py")
 }
 
+# GX Expectation Suite (spec §4 item 2 output), shipped alongside silver_stock.py
+# via --extra-files so the item 4 Audit step can load it without reconstructing
+# the FileDataContext project layout on Glue's single-script runtime.
+resource "aws_s3_object" "silver_stock_suite" {
+  bucket = aws_s3_bucket.data_engineering.id
+  key    = "glue-scripts/silver_stock_suite.json"
+  source = "${path.module}/../../../src/quality/gx/expectations/silver_stock.json"
+  etag   = filemd5("${path.module}/../../../src/quality/gx/expectations/silver_stock.json")
+}
+
 resource "aws_s3_object" "gold_script" {
   bucket = aws_s3_bucket.data_engineering.id
   key    = "glue-scripts/gold_monthly_ohlcv.py"
@@ -102,6 +112,10 @@ resource "aws_glue_job" "silver_stock" {
     "--ICEBERG_TABLE"                    = "stock"
     "--enable-continuous-cloudwatch-log" = "true"
     "--enable-metrics"                   = "true"
+    # spec §8 GX-on-Spark-on-Glue spike: install GX at job bootstrap and ship
+    # the item 2 Expectation Suite JSON alongside the script (item 4 Audit).
+    "--additional-python-modules" = "great-expectations==1.19.1"
+    "--extra-files"               = "s3://${aws_s3_bucket.data_engineering.id}/${aws_s3_object.silver_stock_suite.key}"
   }
 }
 

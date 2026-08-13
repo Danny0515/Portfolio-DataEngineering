@@ -196,3 +196,36 @@
 ### Notes
 
 > 本機用 Hadoop catalog 驗證的是「Iceberg branch 寫入機制本身」，跟 spec §3.2/§8 真正要問的「Glue Data Catalog 這個 catalog-impl 支不支援 branch」是兩件分開的事，前者不能替代後者——這點在本機驗證完成、使用者主動要求「直接測試 Glue 是否可行」後才補上，也因此在驗證腳本與 runbook 裡都刻意標註兩者的差異與各自涵蓋範圍，並在 runbook 中明訂為 Slice 1 階段往後的驗收慣例。
+
+## Session 008 — 2026-08-13
+
+- **Engineer**: Danny
+- **Role**: Data Engineer
+- **LLM Used**: Claude Code (claude-sonnet-5)
+- **Module**: slice1-gx-audit
+
+### Completed
+
+- [x] Slice 1 §4 項目 4：`src/transform/silver_stock.py` 新增 Audit 步驟（spike 形式）——WAP Write 之後讀出 staging，載入已版控的 Suite JSON（`gx.ExpectationSuite(**json.load(...))`，不重建 `build_expectation_suite.py` 那條 YAML 路徑），用 `mode="ephemeral"` Data Context + `add_spark` Datasource 跑 validate，結果印到 CloudWatch；Publish/擋下邏輯（項目 5）、稽核紀錄落地（項目 6）仍未實作
+- [x] `infra/environments/dev/glue.tf`：新增 `aws_s3_object.silver_stock_suite` 上傳 Suite JSON，`silver_stock` job 加 `--additional-python-modules=great-expectations==1.19.1` 與 `--extra-files`；用 `terraform apply -target` 只套用這 3 個資源，刻意略過 `plan` 中額外顯示的既有 `aws_lakeformation_permissions.athena_reader_tables["bronze"]` drift（不在本次範圍，見 Next Steps）
+- [x] 真實 AWS Glue 上跑兩輪驗證（2026-08-13）：全乾淨資料 `SUCCEEDED`（104 秒，`success=True`）；`--dirty-rate 0.4` 灌入六種髒資料後 `SUCCEEDED`（132 秒，`success=False` + 5 條規則違規明細）——spec §8 三個未知項（依賴打包／Data Context 模式／Spark 引擎相容性）全數解除，`--additional-python-modules` 可行、不需降級為 `--extra-py-files`；新增 `docs/runbooks/slice1-gx-audit-verification.md` 記錄過程與實測數字
+- [x] `docs/specs/slice1-quality-contract.md`：§4 項目 4 打勾；§8 兩個風險 bullet 都保留原文，句尾附加精簡的「已驗證」結論 + 連結對應 runbook（比照既有 §3.2 bullet 的模式）
+- [x] 修正 `execution-roadmap.md` 與 spec §9 的 ADR 檔名編號衝突：`0003-wap-quality-gate.md` → `0004-wap-quality-gate.md`（避免撞既有 `0003-append-vs-overwrite.md`；Session 007 Notes 已預先提醒過這個編號問題，這次順手修正）
+- [x] 本機 GX + Spark 驗證：`tests/quality/conftest.py` 把 dirty/clean rows 抽成共用 fixture，新增 `tests/quality/test_gx_spark_validation.py` 用本機 `pyspark` 驗證同一份 Suite 的 Spark 引擎路徑，`test_build_expectation_suite.py` 改吃共用 fixture
+- [x] 新增 `pytest.ini`：把 `pyproject.toml` 的 `[tool.pytest.ini_options]` 搬過來（移除舊區塊避免死設定），新增 `compat` marker（分類「驗證套件/工具版本可用性」的測試）+ `addopts = -m "not compat"` 預設排除，`test_gx_spark_validation.py` 標記為 `compat`
+- [x] 新增 `ai/contexts/coding-style.md`（目前只記錄 `compat` marker 規範，隨專案發展擴充），`CLAUDE.md` 新增「程式碼風格」小節指向該文件，只在實際寫程式/測試時才需讀取，避免無關對話浪費 token
+- [x] `.gitignore` 新增 tmp 檔案忽略規則（`*/*tmp*`、`tmp*`）
+
+### Related ADRs
+
+- 無新增 ADR。spec §8 GX 整合複雜度風險原本若卡關可能觸發「改選 Soda Core」的更大幅度變動才需要 ADR，但本次實測 `--additional-python-modules` 直接可行，未觸發該條件；WAP Gate 正式 ADR（`0004-wap-quality-gate.md`）仍留待項目 9
+
+### Next Steps
+
+- [ ] (延續 Session 007，範圍縮小為) Slice 1 §4 項目 5-9：Publish/擋下邏輯、稽核紀錄落地、Data Contract 撰寫（`market-data.contract.yaml`）、端到端驗證、文件產出（Pattern Card + ADR + Decision Log）
+- [ ] (延續 Session 006) 視 §4 項目 4-6 完成進度，補寫 `docs/arc42/08_concepts.md` 的「Data Quality 設計原則」一節（本次只完成項目 4，5-6 仍未做，暫緩）
+- [ ] `aws_lakeformation_permissions.athena_reader_tables["bronze"]` 的 drift：實際權限（`ALTER`/`DELETE`/`DROP`/`INSERT`/`ALL`）多於 `.tf` 宣告的（`DESCRIBE`/`SELECT`）——為開發階段方便測試而手動放寬，待開發完成後需調整回 `.tf` 宣告的最小權限（`DESCRIBE`/`SELECT`）並用 Terraform 收斂，目前用 `-target` 刻意略過
+
+### Notes
+
+> 這次驗證刻意分兩層：先在本機用 `pyspark` 隔離測「GX 對 Spark DataFrame 本身有沒有問題」（跟 AWS 無關），確認沒問題後才上真實 Glue 測「Glue 環境特有的限制」（套件打包），這樣 Glue 上若出錯，範圍能直接縮小到只剩 Glue-specific 的部分，不用同時排查兩層變因。`compat` 這個 pytest marker 是這次新建立的通用慣例，未來任何「測套件/工具版本能不能用」性質的測試都比照掛這個 tag，預設不進日常 `pytest` 執行範圍。

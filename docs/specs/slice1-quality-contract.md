@@ -100,7 +100,7 @@ Bronze (Iceberg, append 原樣落地 — 沿用 Slice 0，不變動)
 | 1 | 髒資料注入開關 | 依 §3.3 決定，擴充 generator 或新增 script | 可產生違反 §6 規則的資料 | ✅ |
 | 2 | 品質規則定義 | 用 §3.1 選定工具，定義 §6 的檢核規則 | Expectation Suite / Soda check YAML | ✅ |
 | 3 | WAP staging 機制 | 依 §3.2 決定，實作 Write 階段（寫入 staging） | staging branch/table | ✅ |
-| 4 | Audit 執行 | 對 staging 資料跑品質規則，產出通過/失敗結果 | 檢核結果（pass/fail + 明細） | |
+| 4 | Audit 執行 | 對 staging 資料跑品質規則，產出通過/失敗結果 | 檢核結果（pass/fail + 明細） | ✅ |
 | 5 | Publish / 擋下邏輯 | 通過 → merge 到正式 Silver；失敗 → 不 merge + 寫入稽核紀錄 | 正式 `silver.stock` 更新 或 擋下紀錄 | |
 | 6 | 稽核紀錄落地 | 被擋下的批次與觸犯規則寫入可查詢的地方（表或檔案） | 稽核紀錄（Athena 可查） | |
 | 7 | Data Contract 撰寫 | 依 §3.4 決定，`stock`（Silver）帶完整品質規則，`monthly_ohlcv`（Gold）只定義 schema | `docs/contracts/market-data.contract.yaml` | |
@@ -148,8 +148,13 @@ Bronze (Iceberg, append 原樣落地 — 沿用 Slice 0，不變動)
 ## 8. 相依 (Dependencies) / 風險 (Risks)
 
 - **相依**：Slice 0 的 Silver（[slice0-batch-market-data.md](slice0-batch-market-data.md) 項目 6）與 Gold（項目 7）需先完成，本 Slice 才有正式 Silver/Gold 可以疊加關卡與定義契約
-- **風險**：§3.2 選定 Iceberg 原生 branch，需先確認目前 AWS Glue Catalog + Spark/Iceberg 版本組合是否完整支援 branch 操作，卡關需降級為手動 staging table 並留 ADR 記錄
-- **風險**：§3.1 選定 Great Expectations，在 Spark on Glue 環境的整合複雜度未知，需預留 spike 時間
+- **風險**：§3.2 選定 Iceberg 原生 branch，需先確認目前 AWS Glue Catalog + Spark/Iceberg 版本組合是否完整支援 branch 操作，卡關需降級為手動 staging table 並留 ADR 記錄。**已於 2026-08-07 在正式環境驗證完畢，Glue Catalog 完整支援 branch 操作，維持原決定**，完整驗證過程與數字見 [docs/runbooks/slice1-verification.md](../runbooks/slice1-verification.md)。
+- **風險**：§3.1 選定 Great Expectations，在 Spark on Glue 環境的整合複雜度目前有三個具體未知項，需比照 §3.2 branch 風險已驗證解除的方式（先本機驗證邏輯本身、再上正式環境跑一次真實 spike、留下 runbook 佐證），逐一驗證後才能視為風險解除：
+  1. **依賴打包**：`great-expectations==1.19.1` 依賴鏈頗重（含 pandas、numpy、scipy、pydantic、altair 等），`infra/environments/dev/glue.tf` 目前完全沒有 Python 套件打包機制（`--additional-python-modules`、`--extra-py-files` 都還沒導入），需要從零驗證 Glue 5.0 runtime 下哪種打包方式可行、開機安裝耗時是否落在目前 Job `timeout = 10` 分鐘的可接受範圍內。
+  2. **Data Context 模式**：本機 `src/quality/gx/` 目前只是 GX 的 FileDataContext 專案骨架（`great_expectations.yml` 尚未接上任何 Datasource/Checkpoint），但 Glue Job 是「單一 .py 腳本上傳 S3」的部署模型，與 FileDataContext 預期的專案目錄結構天生不合；需要驗證改用 `gx.get_context(mode="ephemeral")`——這個 API 本身已在 `tests/quality/test_build_expectation_suite.py` 驗證過可行——搭配執行期呼叫 `build_expectation_suite.build_suite()` 重建 Suite，在 Glue runtime 上是否也能正常運作。
+  3. **Spark 執行引擎相容性**：目前只驗證過 GX 對 pandas DataFrame 的檢核（同上測試檔），GX 的 Spark Datasource／Validator 對 Glue 提供的 `SparkSession`、讀自 Iceberg `branch_staging` 的 DataFrame 是否能正確運作，完全沒有測試過。
+
+  **驗證計畫**：先在本機用 PySpark（現有 dev-only 依賴，不碰 AWS）跑一次 GX Spark 路徑的煙霧測試，隔離「GX 的 Spark 支援本身有沒有問題」；接著在真實 Glue Job 上加一個最小 Audit 呼叫（讀 `TABLE_FQN.branch_staging`、跑 GX validate、把 pass/fail 摘要印到 CloudWatch），分別跑一次全乾淨資料與 `--inject-dirty` 髒資料，確認兩者的 validation 結果符合預期（比照 `TestSuiteCatchesDirtyData` 涵蓋的六種髒資料類型逐一核對）。若 `--additional-python-modules` 卡關（安裝失敗、與 Glue 內建套件版本衝突、或耗時不可接受），降級方案是改預先打包 wheelhouse 經 `--extra-py-files` 上傳 S3；若整條依賴打包路徑都卡關，才需要回頭重新討論 §3.1 是否改選 Soda Core（屬於更大幅度變動，需使用者確認並留 ADR）。驗證結果會產出對應 runbook（比照 slice1-verification.md 的風格：背景／前置條件／步驟／參考結果／相關文件），屆時把本風險項的解除證據補回這裡。**已於 2026-08-13 在正式環境驗證完畢，`--additional-python-modules` 可行（安裝無衝突，兩輪 Job 執行時間分別為 104 秒、132 秒，遠低於 10 分鐘 timeout），三個未知項全數解除，不需要走 `--extra-py-files` 降級方案**，完整驗證過程與數字見 [docs/runbooks/slice1-gx-audit-verification.md](../runbooks/slice1-gx-audit-verification.md)。
 
 ---
 
@@ -159,5 +164,5 @@ Bronze (Iceberg, append 原樣落地 — 沿用 Slice 0，不變動)
 
 - `docs/patterns/wap-quality-gate.md` — WAP Pattern Card
 - `docs/contracts/market-data.contract.yaml` — 第一份生效契約
-- `docs/architecture/adr/0003-wap-quality-gate.md` — 為何用 WAP 而非事後檢核
+- `docs/architecture/adr/0004-wap-quality-gate.md` — 為何用 WAP 而非事後檢核
 - Decision Log：Great Expectations vs Soda Core 的取捨（§3.1）、Iceberg branch vs 手動 staging 的取捨（§3.2）、Data Contract 涵蓋 Gold schema-only 的取捨（§3.4）
