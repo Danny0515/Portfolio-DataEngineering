@@ -229,3 +229,32 @@
 ### Notes
 
 > 這次驗證刻意分兩層：先在本機用 `pyspark` 隔離測「GX 對 Spark DataFrame 本身有沒有問題」（跟 AWS 無關），確認沒問題後才上真實 Glue 測「Glue 環境特有的限制」（套件打包），這樣 Glue 上若出錯，範圍能直接縮小到只剩 Glue-specific 的部分，不用同時排查兩層變因。`compat` 這個 pytest marker 是這次新建立的通用慣例，未來任何「測套件/工具版本能不能用」性質的測試都比照掛這個 tag，預設不進日常 `pytest` 執行範圍。
+
+## Session 009 — 2026-08-14
+
+- **Engineer**: Danny
+- **Role**: Data Engineer
+- **LLM Used**: Claude Code (claude-sonnet-5)
+- **Module**: slice1-publish-audit-log
+
+### Completed
+
+- [x] Slice 1 §4 項目 5「Publish / 擋下邏輯」：`silver_stock.py` 新增 `get_staging_snapshot_id()` 取得批次識別碼，Audit 通過時 `CALL glue_catalog.system.fast_forward(...)` 把 main 推進到 staging 目前 snapshot；失敗則 main 完全不動。§3.2 定案採 `fast-forward`（不用 cherry-pick），理由與正式環境驗證結果同步寫回 spec §3.2
+- [x] Slice 1 §4 項目 6「稽核紀錄落地」：新增 `write_audit_log()`，每次 Audit（不論成敗）都寫一筆到新的 Iceberg 表 `silver.audit_log`（`batch_id`/`success`/`violations`/`audited_at`），比照 `silver.stock` 既有的 `DESCRIBE TABLE` 判斷建表時機的 pattern；不需要 Terraform 改動，既有 wildcard 權限已涵蓋新表的建立/寫入/Athena 查詢
+- [x] 真實 Glue 上跑三輪驗證（2026-08-14）：意外發現 Bronze 裡殘留上個 session 注入的髒資料（`invalid_symbol`/`invalid_date` 這類會產生全新 key 的髒資料 kind，dedup 邏輯救不回來，永久卡在 Bronze 裡），用 Athena 對 Iceberg v2 表做目標式 `DELETE`（33/3213 列）才跑出真正乾淨的一輪；三輪結果：污染批次擋下（`audit_log` 首筆）→ 清除污染後乾淨批次發佈成功（main snapshot_id 從 `1685447700659273070` 推進到 `7882369420455484184`）→ 發佈後再灌髒資料仍正確擋下（main 維持不動）；新增 `docs/runbooks/slice1-publish-verification.md` 記錄完整過程與數字
+- [x] 移除 `silver_stock.py` 裡跟 GX 規則重疊的手寫品質過濾（原本逐列靜默丟棄 null/負值/`high<low`，導致這兩種髒資料從未出現在 Audit 結果或 `audit_log` 裡）；移除後重新部署驗證，同一組髒資料組合的違規條數從 4-5 條變成完整的 14 條，包含首次出現的 `negative_price`/`high_lt_low` 違規，main 不受影響——追加記錄在同一份 runbook
+- [x] `docs/specs/slice1-quality-contract.md`：§4 項目 5、6 打勾
+
+### Related ADRs
+
+- 無新增 ADR。fast-forward vs cherry-pick 的選擇已在 spec §3.2 定案並附理由，屬於 spec 既有決策的補完，不構成新的架構決策需要 ADR；WAP Gate 正式 ADR（`0004-wap-quality-gate.md`）仍留待項目 9
+
+### Next Steps
+
+- [ ] (延續 Session 008，範圍縮小為) Slice 1 §4 項目 7-9：Data Contract 撰寫（`market-data.contract.yaml`）、端到端驗證、文件產出（Pattern Card + ADR + Decision Log）
+- [ ] (延續 Session 006) §4 項目 4-6 已全數完成，`docs/arc42/08_concepts.md` 的「Data Quality 設計原則」一節現在可以動筆了，本次尚未處理
+- [ ] (延續 Session 008) `aws_lakeformation_permissions.athena_reader_tables["bronze"]` 的 drift：仍未調整回 `.tf` 宣告的最小權限
+
+### Notes
+
+> 這次「重新產生乾淨資料、指望 dedup 覆蓋掉髒資料」的假設一開始不成立，是本次意外發現的重要限制——dedup 只在同一個 (symbol, date) key 內比大小，注入全新 key 的髒資料 kind（`invalid_symbol`/`invalid_date`）永遠不會被覆蓋，只能用明確的 DELETE 清除；這也直接促成了「移除手寫過濾、完全交給 GX」這個後續調整的動機（發現同樣的邏輯用兩套規則各管一半，導致稽核紀錄看不到完整全貌）。

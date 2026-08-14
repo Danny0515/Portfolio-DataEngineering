@@ -60,9 +60,11 @@ Bronze (Iceberg, append 原樣落地 — 沿用 Slice 0，不變動)
 
 ✅ **決定：A. Iceberg 原生 branch**。理由：更貼近 WAP pattern 的原始設計。若實作時發現目前 AWS Glue Catalog + Spark/Iceberg 版本組合不支援或操作卡關，降級為手動 staging table 並在 ADR 記錄原因（呼應 CLAUDE.md RULE-003 精神：best practice 優先，卡關才討論特例）。
 
+Publish 機制進一步定案為 **`fast-forward`**（不用 `cherry-pick`）：`silver_stock.py` 每次執行都對 staging 整批 `overwrite()`、線性往前推進，main 全程是 staging 目前 snapshot 的祖先（已在 [slice1-verification.md](../runbooks/slice1-verification.md) 實測證實），`CALL glue_catalog.system.fast_forward(...)` 直接把 main 指標推到 staging 目前 snapshot，就是「發佈這批經稽核資料」的正確語意；`cherry-pick` 是用來嫁接不連續 snapshot 的機制，不符合這裡的線性推進形狀，不採用。已於 2026-08-14 在正式環境驗證：Audit 通過時 main 正確推進到 staging 當輪 snapshot，Audit 失敗時 main 完全不動，見 [slice1-publish-verification.md](../runbooks/slice1-publish-verification.md)。
+
 | 選項 | 說明 |
 | --- | --- |
-| **A. Iceberg 原生 branch**（已選，`CREATE BRANCH` / `.branch_staging`） | 用 Iceberg table branching 功能，Audit 通過後 `fast-forward` 或 `cherry-pick` 到 main branch |
+| **A. Iceberg 原生 branch**（已選，`CREATE BRANCH` / `.branch_staging`） | 用 Iceberg table branching 功能，Audit 通過後 `fast-forward`（已選）到 main branch |
 | B. 手動 staging table（卡關時的降級方案） | 建一張 `silver_staging.stock`，Audit 通過後用 Spark 讀出重寫進 `silver.stock` |
 
 ### 3.3 壞資料如何注入
@@ -101,8 +103,8 @@ Bronze (Iceberg, append 原樣落地 — 沿用 Slice 0，不變動)
 | 2 | 品質規則定義 | 用 §3.1 選定工具，定義 §6 的檢核規則 | Expectation Suite / Soda check YAML | ✅ |
 | 3 | WAP staging 機制 | 依 §3.2 決定，實作 Write 階段（寫入 staging） | staging branch/table | ✅ |
 | 4 | Audit 執行 | 對 staging 資料跑品質規則，產出通過/失敗結果 | 檢核結果（pass/fail + 明細） | ✅ |
-| 5 | Publish / 擋下邏輯 | 通過 → merge 到正式 Silver；失敗 → 不 merge + 寫入稽核紀錄 | 正式 `silver.stock` 更新 或 擋下紀錄 | |
-| 6 | 稽核紀錄落地 | 被擋下的批次與觸犯規則寫入可查詢的地方（表或檔案） | 稽核紀錄（Athena 可查） | |
+| 5 | Publish / 擋下邏輯 | 通過 → merge 到正式 Silver；失敗 → 不 merge + 寫入稽核紀錄 | 正式 `silver.stock` 更新 或 擋下紀錄 | ✅ |
+| 6 | 稽核紀錄落地 | 被擋下的批次與觸犯規則寫入可查詢的地方（表或檔案） | 稽核紀錄（Athena 可查） | ✅ |
 | 7 | Data Contract 撰寫 | 依 §3.4 決定，`stock`（Silver）帶完整品質規則，`monthly_ohlcv`（Gold）只定義 schema | `docs/contracts/market-data.contract.yaml` | |
 | 8 | 端到端驗證 | 分別跑一次「全乾淨資料」與「含髒資料」批次，確認 Gate 行為符合預期 | 驗證紀錄 | |
 | 9 | 文件產出 | 依 execution-roadmap.md Slice 1 要求 | 見下方 §9 | |
