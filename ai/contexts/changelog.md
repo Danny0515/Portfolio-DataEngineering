@@ -258,3 +258,28 @@
 ### Notes
 
 > 這次「重新產生乾淨資料、指望 dedup 覆蓋掉髒資料」的假設一開始不成立，是本次意外發現的重要限制——dedup 只在同一個 (symbol, date) key 內比大小，注入全新 key 的髒資料 kind（`invalid_symbol`/`invalid_date`）永遠不會被覆蓋，只能用明確的 DELETE 清除；這也直接促成了「移除手寫過濾、完全交給 GX」這個後續調整的動機（發現同樣的邏輯用兩套規則各管一半，導致稽核紀錄看不到完整全貌）。
+
+## Session 010 — 2026-08-14
+
+- **Engineer**: Danny
+- **Role**: Data Engineer
+- **LLM Used**: Claude Code (claude-sonnet-5)
+- **Module**: query_audit_log_skill
+
+### Completed
+
+- [x] 新增 `query_audit_log` skill：`.claude/commands/query_audit_log.md` 定義，`scripts/query_audit_log.sh` 作為 dispatcher（第一個參數是方法名稱，對應 `scripts/query_audit_log/<method>.sh` 一支獨立 script），目前提供 `get_job_log_by_snapshot`——用 `silver.audit_log.batch_id`（Iceberg snapshot_id）反查對應的 Glue Job Run ID，撈出該次執行完整的 CloudWatch log
+- [x] 設計成可擴充結構：新增方法只需要在 `scripts/query_audit_log/` 底下加一支新 `.sh`、在 skill 文件補一個小節，不需要改 dispatcher 本身；skill 文件內附「如何新增方法」說明
+
+### Related ADRs
+
+- 無新增 ADR（開發工具/腳本層級的擴充，不構成架構決策）
+
+### Next Steps
+
+- [ ] (延續 Session 008，範圍縮小為) Slice 1 §4 項目 7-9：Data Contract 撰寫（`market-data.contract.yaml`）、端到端驗證、文件產出（Pattern Card + ADR + Decision Log）
+- [ ] (延續 Session 006) §4 項目 4-6 已全數完成，`docs/arc42/08_concepts.md` 的「Data Quality 設計原則」一節現在可以動筆了，本次尚未處理
+- [ ] (延續 Session 008) `aws_lakeformation_permissions.athena_reader_tables["bronze"]` 的 drift：仍未調整回 `.tf` 宣告的最小權限
+
+### Notes
+
