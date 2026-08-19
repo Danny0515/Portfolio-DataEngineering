@@ -165,5 +165,5 @@ Athena 確認 `main` 仍是 `7882369420455484184`，完全沒被這輪異動—�
 
 - [docs/specs/slice1-quality-contract.md](../specs/slice1-quality-contract.md) §3.2 / §4 項目 5-6 — 這份 runbook 對應的決策與待驗收項目
 - [docs/runbooks/slice1-gx-audit-verification.md](slice1-gx-audit-verification.md) — item 4 Audit 的正式環境驗證，本文件延伸驗證下一步的 Publish/擋下
-- [docs/runbooks/slice1-verification.md](slice1-verification.md) — WAP staging（Write 階段）驗證，main 全程是 staging 祖先的性質是 `fast_forward` 能成立的前提
+- [docs/runbooks/slice1-wap-verification.md](slice1-wap-verification.md) — WAP staging（Write 階段）驗證，main 全程是 staging 祖先的性質是 `fast_forward` 能成立的前提
 - [docs/runbooks/generate-stock-data.md](generate-stock-data.md) — 髒資料產生方式與涵蓋的六種 kind

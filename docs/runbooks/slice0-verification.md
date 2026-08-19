@@ -54,7 +54,7 @@ DESCRIBE bronze.stock;
 
 ## Silver 驗證
 
-> 以下查詢假設的是 Slice0 當時「Silver 每次執行都直接整表覆寫 main」的行為。Slice1 導入 WAP staging 機制後（見 [slice1-verification.md](slice1-verification.md)），`silver_stock.py` 從第 2 次執行起改寫入 staging branch，main 不會再隨每次執行更新——下面「筆數應該等於 Bronze 筆數」這類比對，只在 main 是「最後一次成功 Publish 的結果」時才成立，不是每次執行後都能直接拿來核對。
+> 以下查詢假設的是 Slice0 當時「Silver 每次執行都直接整表覆寫 main」的行為。Slice1 導入 WAP staging 機制後（見 [slice1-wap-verification.md](slice1-wap-verification.md)），`silver_stock.py` 從第 2 次執行起改寫入 staging branch，main 不會再隨每次執行更新——下面「筆數應該等於 Bronze 筆數」這類比對，只在 main 是「最後一次成功 Publish 的結果」時才成立，不是每次執行後都能直接拿來核對。
 
 ```sql
 -- 1. 筆數比對：dirty-rate=0 時應該等於 Bronze 筆數（沒有資料被去重濾掉）

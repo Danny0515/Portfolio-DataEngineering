@@ -1,0 +1,188 @@
+# 市場行情資料 Data Contract — 本專案第一份生效契約。
+#
+# 格式以 plan.md §4.2 / execution-roadmap.md Slice1 段落定案的 datacontract.com
+# spec 風格 YAML 為起點，依 Slice 1 當下實作細節調整（詳見
+# docs/specs/slice1-quality-contract.md §3.4）：
+#   - stock（Silver）：完整 schema + quality 規則，規則內容與
+#     src/quality/rules/silver_stock.yaml（Great Expectations, 14 條）逐一對應，
+#     由 Bronze→Silver 之間的 WAP Gate（src/transform/silver_stock.py）強制執行。
+#   - monthly_ohlcv（Gold）：僅 schema，不附加 quality 規則或聚合一致性檢查
+#     （聚合一致性驗證留給 Slice 3 有真正下游 consumer 時再補）。
+#   - 不含 servers.kafka 等串流專屬欄位：plan.md §4.2 範例是為 Slice 2 的 Kafka
+#     trade events 設計，這裡是批次 Iceberg 表，改用 servers.glue 描述目標 catalog。
+#   - CI 自動相容性檢查留給 Slice 4（見 spec Non-Goals），本檔案目前只作為
+#     版控化的契約宣告，尚未接自動化驗證工具。
+
+dataContractSpecification: 0.9.3
+id: market-data
+info:
+  title: 市場行情資料 (Market Data)
+  version: 1.0.0
+  status: active
+  owner: data-platform-team
+  description: >
+    股票歷史日行情資料契約，涵蓋 Silver 層明細表與 Gold 層月頻聚合表。
+    Silver 層透過 WAP (Write-Audit-Publish) Gate 強制本契約列出的品質規則，
+    詳見 docs/patterns/wap-quality-gate.md 與
+    docs/architecture/adr/0004-wap-quality-gate.md。
+
+servers:
+  glue:
+    type: glue
+    region: ap-northeast-1
+    catalog: glue_catalog
+
+models:
+  stock:
+    description: >
+      Silver 層股票日行情明細。經 Bronze→Silver 的 WAP Gate 稽核通過後，才會
+      從 staging branch fast-forward 到正式 main，因此正式表裡的每一列都已滿足
+      下方 quality 規則。
+    type: table
+    physicalName: silver.stock
+    fields:
+      symbol:
+        type: string
+        required: true
+        description: 股票代號，限定 §3.4 決定的合法代號集合（見下方 consistency 規則）
+      trade_date:
+        type: date
+        required: true
+        description: 交易日期（Bronze 原欄位為 date，Silver 轉型後改名 trade_date）
+      open:
+        type: decimal
+        precision: 10
+        scale: 2
+        required: true
+        description: 開盤價
+      high:
+        type: decimal
+        precision: 10
+        scale: 2
+        required: true
+        description: 最高價
+      low:
+        type: decimal
+        precision: 10
+        scale: 2
+        required: true
+        description: 最低價
+      close:
+        type: decimal
+        precision: 10
+        scale: 2
+        required: true
+        description: 收盤價
+      volume:
+        type: integer
+        required: true
+        description: 成交量
+    quality:
+      # 完整性 (Completeness) — 對應 src/quality/rules/silver_stock.yaml 7 條
+      # expect_column_values_to_not_be_null
+      - rule: expect_column_values_to_not_be_null
+        dimension: completeness
+        field: symbol
+      - rule: expect_column_values_to_not_be_null
+        dimension: completeness
+        field: trade_date
+        description: >
+          同時涵蓋「date 需為合法格式」——Silver 用 to_date() 轉型，非 ANSI 模式下
+          無法解析的日期字串會直接轉成 null，格式不合法會反映在這條 not-null 規則上。
+      - rule: expect_column_values_to_not_be_null
+        dimension: completeness
+        field: open
+      - rule: expect_column_values_to_not_be_null
+        dimension: completeness
+        field: high
+      - rule: expect_column_values_to_not_be_null
+        dimension: completeness
+        field: low
+      - rule: expect_column_values_to_not_be_null
+        dimension: completeness
+        field: close
+      - rule: expect_column_values_to_not_be_null
+        dimension: completeness
+        field: volume
+
+      # 有效性 (Validity) — 對應 4 條 expect_column_values_to_be_between (min_value: 0)
+      # + 1 條 expect_column_pair_values_a_to_be_greater_than_b
+      - rule: expect_column_values_to_be_between
+        dimension: validity
+        field: open
+        kwargs: { min_value: 0 }
+      - rule: expect_column_values_to_be_between
+        dimension: validity
+        field: high
+        kwargs: { min_value: 0 }
+      - rule: expect_column_values_to_be_between
+        dimension: validity
+        field: low
+        kwargs: { min_value: 0 }
+      - rule: expect_column_values_to_be_between
+        dimension: validity
+        field: close
+        kwargs: { min_value: 0 }
+      - rule: expect_column_pair_values_a_to_be_greater_than_b
+        dimension: validity
+        description: high >= low
+        kwargs: { column_A: high, column_B: low, or_equal: true }
+
+      # 唯一性 (Uniqueness) — 對應 1 條 expect_compound_columns_to_be_unique
+      - rule: expect_compound_columns_to_be_unique
+        dimension: uniqueness
+        description: (symbol, trade_date) 不得重複
+        kwargs: { column_list: [symbol, trade_date] }
+
+      # 一致性 (Consistency) — 對應 1 條 expect_column_values_to_be_in_set
+      - rule: expect_column_values_to_be_in_set
+        dimension: consistency
+        field: symbol
+        description: >
+          僅接受合法代號集合，來源見 docs/specs/slice0-batch-market-data.md §3.4
+        kwargs: { value_set: ["2330", "2454", "3653"] }
+
+  monthly_ohlcv:
+    description: >
+      Gold 層月頻 OHLCV 聚合。僅描述 schema，不附加 quality 規則或聚合一致性檢查
+      （依 docs/specs/slice1-quality-contract.md §3.4 決定，聚合一致性驗證留給
+      Slice 3 有真正下游 consumer 時再補）。
+    type: table
+    physicalName: gold.monthly_ohlcv
+    fields:
+      symbol:
+        type: string
+        required: true
+        description: 股票代號
+      year_month:
+        type: date
+        required: true
+        description: 該月第一天日期，代表聚合月份
+      open:
+        type: decimal
+        precision: 10
+        scale: 2
+        required: true
+        description: 當月第一個交易日的開盤價
+      high:
+        type: decimal
+        precision: 10
+        scale: 2
+        required: true
+        description: 當月最高價
+      low:
+        type: decimal
+        precision: 10
+        scale: 2
+        required: true
+        description: 當月最低價
+      close:
+        type: decimal
+        precision: 10
+        scale: 2
+        required: true
+        description: 當月最後一個交易日的收盤價
+      volume:
+        type: long
+        required: true
+        description: 當月成交量加總

@@ -86,7 +86,7 @@ Silver 這輪：`JobRunState=SUCCEEDED`，`ExecutionTime=132` 秒。CloudWatch l
 ## 相關文件
 
 - [docs/specs/slice1-quality-contract.md](../specs/slice1-quality-contract.md) §4 項目 4 / §8 — 這份 runbook 對應的實作項目與風險項
-- [docs/runbooks/slice1-verification.md](slice1-verification.md) — WAP staging（Write 階段）的正式環境驗證，本文件延伸驗證下一步的 Audit 階段
+- [docs/runbooks/slice1-wap-verification.md](slice1-wap-verification.md) — WAP staging（Write 階段）的正式環境驗證，本文件延伸驗證下一步的 Audit 階段
 - [docs/runbooks/generate-stock-data.md](generate-stock-data.md) — 髒資料產生方式與涵蓋的六種 kind
 - [tests/quality/test_gx_spark_validation.py](../../tests/quality/test_gx_spark_validation.py) — 本機 GX + Spark 驗證（未知項 #2、#3 的本機證據）
 - [tests/quality/test_build_expectation_suite.py](../../tests/quality/test_build_expectation_suite.py) — 同一份 Suite 定義在 pandas 引擎的驗證

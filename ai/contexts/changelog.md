@@ -283,3 +283,35 @@
 
 ### Notes
 
+---
+
+## Session 011 — 2026-08-19
+
+- **Engineer**: Danny
+- **Role**: Data Engineer
+- **LLM Used**: Claude Code (claude-sonnet-5)
+- **Module**: slice1-closeout
+
+### Completed
+
+- [x] (延續 Session 010 Next Step，範圍為 §4 項目 7-9；項目 3-6 已於 Session 007-009 完成) §4 項目 7：撰寫 `contracts/market-data.contract.yaml`（datacontract.com spec 風格，`stock` model 含完整 §6 品質規則、對應 GX 14 條規則；`monthly_ohlcv` model 僅 schema），並依 plan.md §6.1 定案的頂層 `contracts/` 目錄，修正 execution-roadmap.md 內所有舊路徑 `docs/contracts/...` → `contracts/...`
+- [x] §4 項目 8 端到端驗證：完成正式環境三階段驗證（WAP staging/Write、GX Audit、Publish/擋下+稽核紀錄），對應三份衛星 runbook——新增 `docs/runbooks/slice1-wap-verification.md`（原 `slice1-verification.md` 內容改名遷入）、更新 `slice1-gx-audit-verification.md`／`slice1-publish-verification.md` 的交叉引用；spec §7 驗收標準全數勾選 ✅
+- [x] §4 項目 9 文件產出：新增 `docs/architecture/adr/0004-wap-quality-gate.md`（為何用 WAP 而非事後檢核）並登錄進 `docs/arc42/09_architecture_decisions.md` 決策總表；新增 `docs/patterns/wap-quality-gate.md`（本專案第一份 Pattern Card）；新增 `docs/decision-log.md`（跨 Slice 技術選型索引，首批 3 筆：GX vs Soda、Iceberg branch vs 手動 staging、Data Contract 限縮範圍）
+- [x] execution-roadmap.md §3 Gate 表格「驗證」欄補充命名慣例：`slice{N}-verification.md` 為該 Slice 定案驗證文件，個別機制驗證可另開衛星 runbook 由其彙總引用，並補一筆 Changelog（2026-08-19）
+- [x] 新增專案 TODO 追蹤機制：`docs/TODO.md`（使用規則 + 目前 4 個待評估項，多與 Slice4 的 Data Contract 自動化評估有關）+ `CLAUDE.md` 新增對應章節說明用途
+
+### Related ADRs
+
+- 新增 [ADR-0004](../../docs/architecture/adr/0004-wap-quality-gate.md)：為何用 WAP (Write-Audit-Publish) Pattern 而非事後檢核
+
+### Next Steps
+
+- [ ] (延續 Session 006) §4 項目 4-6 已全數完成，`docs/arc42/08_concepts.md` 的「Data Quality 設計原則」一節現在可以動筆了，本次仍未處理
+- [ ] (延續 Session 008) `aws_lakeformation_permissions.athena_reader_tables["bronze"]` 的 drift：仍未調整回 `.tf` 宣告的最小權限
+- [ ] `docs/runbooks/slice1-verification.md` 已重寫為彙總文件（引用 wap/gx-audit/publish 三份衛星 runbook），但尚未人工確認完畢，本次刻意排除在 commit 之外，待確認後於下次推版一併處理
+- [ ] 規劃 Slice 2（CDC 交易串流管線）：依 execution-roadmap.md Slice 2 段落展開待確認事項與實作清單
+
+### Notes
+
+> verification runbook 採「彙總文件 + 衛星文件」慣例：`slice{N}-verification.md` 是該 Slice 定案的驗收證據入口，個別機制（WAP/GX Audit/Publish）各自開衛星 runbook，避免單一大檔案隨機制增加而失控——之後每個 Slice 收尾都比照此結構。
+
