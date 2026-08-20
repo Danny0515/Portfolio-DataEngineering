@@ -1,116 +1,189 @@
-# Runbook: Slice1 WAP Staging 機制 Athena 查詢驗證
+# Runbook: Slice1 端到端驗證（Bronze→Silver WAP Gate→Gold→Athena）
 
 ## 背景 (Why)
 
-對應 [docs/specs/slice1-quality-contract.md](../specs/slice1-quality-contract.md) §4 項目 3「WAP staging 機制」：`src/transform/silver_stock.py` 從第 2 次執行起（`silver.stock` 已存在時），不再直接整表覆寫 main，改成先寫入 Iceberg 的 `staging` branch，main 維持不動。這份 runbook 補上「怎麼在正式環境（AWS Glue + Glue Data Catalog + Athena）用查詢核對這個行為」，比照 [slice0-verification.md](slice0-verification.md) 的方式——只看 Glue Job 回報 `SUCCEEDED` 不足以確認 branch 真的建對、main 真的沒被動到。
+對應 [docs/specs/slice1-quality-contract.md](../specs/slice1-quality-contract.md) §4 項目 8「端到端驗證」。這份文件是 Slice 1 整體是否可視為完成的定案驗證——比照 [slice0-verification.md](slice0-verification.md) 對 Slice 0 的角色，用同一個檔名代表「這個 Slice 完成的證據」，跟三份個別機制的衛星 runbook 分工：
 
-實作本身已經先用 [scripts/verify_wap_branch_write.py](../../scripts/verify_wap_branch_write.py) 在本機（簡化 schema + Iceberg **Hadoop catalog**，不碰 AWS）驗證過 branch 寫入機制；這份文件是同一件事在**正式環境**（真正的 `silver.stock`、**Glue Data Catalog**、Athena）的對應驗證，兩者互補，不是重複。
+- [slice1-wap-verification.md](slice1-wap-verification.md) — 只驗證 Write 階段（staging branch 建立、main 不受影響）
+- [slice1-gx-audit-verification.md](slice1-gx-audit-verification.md) — 只驗證 Audit 階段（GX 在 Glue Spark 上能否正確跑）
+- [slice1-publish-verification.md](slice1-publish-verification.md) — 只驗證 Publish/擋下 + 稽核紀錄落地
 
-**兩者的權威性不對等，這點要明確**：本機 Hadoop catalog 只適合開發當下快速驗證邏輯本身寫得對不對（不用每次改動都真的跑一次 Glue Job，省時間也省成本），**不能取代正式環境驗證**——Hadoop catalog 是完全不同的 catalog-impl，測不到「Glue Data Catalog 支不支援某個 Iceberg 操作」這件事（見下方 §3.2/§8 風險說明的實際案例）。**Slice 1 階段驗收時，一律以這份文件（真實 AWS Glue + Glue Data Catalog + Athena）的結果為準**；本機腳本的結果只作為開發期間的參考，不具驗收效力。
-
-**這份 runbook 同時是 spec §3.2 / §8 那個懸而未決風險的解答**：「AWS Glue Catalog + 目前綁定的 Iceberg 1.7.1 版本組合是否真的支援 `CREATE BRANCH` 操作」，本機驗證完全沒測到這件事——`verify_wap_branch_write.py` 用的是 Hadoop catalog（純檔案系統），branch 語法在 Iceberg Spark 層是通用邏輯沒錯，但「Glue Catalog 這個 catalog-impl 實作本身」有沒有正確支援 branch 相關的 RPC/metadata 操作，只有真的對著 `glue_catalog` 下 `ALTER TABLE ... CREATE BRANCH` 才測得到。**這件事已經在 2026-08-07 實際跑過兩輪確認：Glue Catalog + Iceberg 1.7.1 完整支援 branch 操作，spec §3.2/§8 的風險已解除，不需要走「降級為手動 staging table + ADR」的備案路線**——完整過程與數字見下方「參考結果」。
-
-**範圍限制**：目前只有項目 3（Write 階段）完成，項目 4（Audit）與項目 5（Publish/fast-forward）都還沒實作。這份 runbook 只能驗證「staging 有沒有正確收到新資料、main 有沒有維持不動」，還不能驗證「品質不合格的資料會被擋下」——那要等項目 4/5 做完才有意義，屆時會在這份文件補上對應章節。
+這三份都已個別驗證過各自的機制，但都還沒有人跑過「整條 Bronze→Silver(WAP)→Gold→Athena 鏈路，分別餵全乾淨資料與含髒資料各一輪，從頭到尾看結果」——這正是 spec §7 驗收標準第 1、2、3 條要求的證據形狀。本文件補上這個視角，不重複三份衛星 runbook 已經證實過的細節（例如 branch 語意、GX 套件打包），只聚焦在「整條鏈路串起來、Gold 層也拉進來看」這件事。
 
 ## 前置條件
 
-- 本機已有可用的 AWS MFA session（`dt-lab-long-term-mfa`，見 `aws-cli-mfa-session` skill；也可以直接在 AWS Console 的 Athena 頁面手動貼上跑）
-- `silver.stock` **必須已經存在**（沿用 Slice0 或先前 Slice1 執行留下的表即可，不需要重新跑 Bronze）。這點是這份 runbook 能不能驗證到重點的關鍑：`silver_stock.py` 只有在表已存在時才會走 staging branch 路徑；如果是全新環境、`silver.stock` 還不存在，第一次執行只會走 bootstrap（直接建表在 main），看不到任何 branch 行為，必須先確保表已存在再開始下面的步驟
+- 本機已有可重用的 AWS MFA session（`dt-lab-long-term-mfa`，見 `aws-cli-mfa-session` skill）
+- `bronze.stock`、`silver.stock`、`gold.monthly_ohlcv` 三個 Glue Job 已存在且先前至少成功執行過一次
 
-## 部署新版程式碼
+## 執行前基準（2026-08-19）
+
+延續前次 session（見 [slice1-publish-verification.md](slice1-publish-verification.md)）結束時的狀態：
+
+| | 值 |
+| --- | --- |
+| `bronze.stock` 筆數 | 4836 |
+| `silver.stock`（main）筆數 | 816 |
+| `gold.monthly_ohlcv` 筆數 | 39 |
+| main snapshot_id | `7882369420455484184` |
+
+## Round 1：全乾淨資料端到端
 
 ```bash
-terraform apply
+uv run python src/ingestion/generate_stock_data.py   # 預設全乾淨，262 個交易日、786 列
+aws s3 sync data/raw/market/stock/ s3://danny-data-engineering/raw/market/stock/ --profile dt-lab-long-term-mfa --region ap-northeast-1
+aws glue start-job-run --job-name slice0-bronze-stock --region ap-northeast-1 --profile dt-lab-long-term-mfa
 ```
 
-在 `infra/environments/dev` 下執行。這次改動只動了 `src/transform/silver_stock.py` 的內容，Terraform 會偵測到 `aws_s3_object.silver_script` 的 `etag` 變化並重新上傳腳本到 S3，不會新增任何資源。
+Bronze `SUCCEEDED`（86 秒）。
 
-## 記下執行前的基準
+### 意外插曲：上次 session 遺留的永久性 Bronze 污染，這次才發作
+
+跑第一次 Silver 時 Audit **意外失敗**：
+
+```
+[Audit] staging validation success=False
+[Audit] FAILED: expect_column_values_to_not_be_null column=symbol
+[Audit] FAILED: expect_column_values_to_be_in_set column=symbol
+[Audit] FAILED: expect_column_values_to_not_be_null column=trade_date
+[Audit] FAILED: expect_compound_columns_to_be_unique column_list=[symbol, trade_date]
+[Publish] BLOCKED: batch 307223448062407430 failed audit, main not updated, 4 violations logged to audit_log
+```
+
+這批資料理論上是全乾淨的，不該觸犯任何規則。查 `bronze.stock` 才發現：[slice1-publish-verification.md](slice1-publish-verification.md)「意外插曲」記錄過的問題（`invalid_symbol`/`invalid_date`/打在 `symbol`/`date` 上的 `empty_field` 會產生全新 `(symbol, date)` key，dedup 救不回來，永久卡在 Bronze）在**上次 session 結束時沒有清乾淨**——這次一啟動就踩到，`bronze.stock` 裡還殘留 68 列符合污染條件的舊資料。比照上次記錄的作法，執行同一條 `DELETE`（範圍精準，只刪符合污染條件的列，不影響其餘歷史資料）：
 
 ```sql
--- main 筆數（之後每一輪執行都應該維持這個數字不變）
-SELECT COUNT(*) AS silver_count_before FROM silver.stock;
-
--- 目前的 branch/tag 清單，乾淨環境下應該只有 main 一條
-SELECT * FROM "silver"."stock$refs";
+-- 執行前 68 列符合污染條件
+DELETE FROM bronze.stock
+WHERE symbol IS NULL
+   OR symbol NOT IN ('2330', '2454', '3653')
+   OR date IS NULL
+   OR NOT regexp_like(date, '^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+-- 執行後同條件查詢回傳 0 列，bronze.stock 總數變為 5593
 ```
 
-## 觸發 Silver Glue Job（第一輪）
+清除後重跑 Silver：
 
 ```bash
 aws glue start-job-run --job-name slice0-silver-stock --region ap-northeast-1 --profile dt-lab-long-term-mfa
 ```
 
-## 驗證：staging branch 是否正確建立、main 是否維持不動
+`SUCCEEDED`（132 秒）：
 
-```sql
--- 1. 應該多一條 name='staging' 的 ref，main 的 snapshot_id 應該跟執行前完全一樣
-SELECT * FROM "silver"."stock$refs";
-
--- 2. main 筆數應該跟執行前的基準值一致，不因為這次執行而改變
-SELECT COUNT(*) AS silver_count_after FROM silver.stock;
-
--- 3. snapshot 歷史應該多一筆新 snapshot；這筆新 snapshot 的 parent_id 應該等於
---    main 目前的 snapshot_id（對應 docs/specs/slice1-quality-contract.md §3.2
---    決定 A 底下、CREATE BRANCH IF NOT EXISTS 冪等性推導出的「main 永遠是
---    staging 每個新 snapshot 的祖先」這個性質，未來項目 5 的 fast_forward 依賴這點）
-SELECT snapshot_id, parent_id, committed_at, operation
-FROM "silver"."stock$snapshots"
-ORDER BY committed_at DESC
-LIMIT 5;
+```
+[Audit] staging validation success=True
+[Publish] merged staging (snapshot=6301798231775002437) -> main
 ```
 
-## 驗證：重跑（rerun）是否維持 main 不動、staging 持續疊加新 snapshot
-
-比照 [slice0-verification.md](slice0-verification.md)「Bronze 重跑驗證」的精神，Silver 的 WAP write 也該實測「跑第二次」的行為，不能只驗證一次就假設冪等性成立：
+再跑 Gold：
 
 ```bash
-aws glue start-job-run --job-name slice0-silver-stock --region ap-northeast-1 --profile dt-lab-long-term-mfa
+aws glue start-job-run --job-name slice0-gold-monthly-ohlcv --region ap-northeast-1 --profile dt-lab-long-term-mfa
 ```
+
+`SUCCEEDED`（54 秒）。
+
+### Round 1 參考結果
 
 ```sql
--- main 筆數應該仍與最初基準值相同——連續兩輪執行都沒有更新過 main
-SELECT COUNT(*) AS silver_count_after_2nd_run FROM silver.stock;
+SELECT * FROM "silver"."stock$refs";
+-- staging | BRANCH | 6301798231775002437
+-- main    | BRANCH | 6301798231775002437   <- 與 staging 一致，fast_forward 生效
 
--- 應該又多一筆新 snapshot，其 parent_id 應該等於「第一輪執行後 staging 那筆
--- snapshot 的 snapshot_id」，而不是 main 的 snapshot_id——這才是
--- CREATE BRANCH IF NOT EXISTS 對已存在 branch 是 no-op（不重置 HEAD）的具體證據
-SELECT snapshot_id, parent_id, committed_at, operation
-FROM "silver"."stock$snapshots"
-ORDER BY committed_at DESC
-LIMIT 5;
+SELECT COUNT(*) FROM silver.stock;  -- 825
+
+-- 品質規則檢查（spec §6），應回傳 0
+SELECT COUNT(*) FROM silver.stock
+WHERE high < low OR open < 0 OR high < 0 OR low < 0 OR close < 0
+   OR open IS NULL OR high IS NULL OR low IS NULL OR close IS NULL
+   OR symbol NOT IN ('2330','2454','3653');
+-- 0
+
+-- 去重檢查，應回傳 0
+SELECT COUNT(*) FROM (SELECT symbol, trade_date FROM silver.stock GROUP BY symbol, trade_date HAVING COUNT(*) > 1);
+-- 0
+
+SELECT COUNT(*) FROM gold.monthly_ohlcv;  -- 42
 ```
 
-## （選用）直接讀 staging branch 的實際資料內容
-
-上面幾條查詢只靠 metadata table（`$refs`/`$snapshots`）就能確認「branch 有沒有建對、main 有沒有被動到」，不需要真的讀到 staging 的資料列。如果想進一步肉眼核對 staging 裡的實際內容，可以先試：
+Gold 聚合正確性交叉驗證（`2330` / `2026-07`）：
 
 ```sql
-SELECT * FROM silver.stock FOR VERSION AS OF 'staging' LIMIT 20;
-SELECT COUNT(*) FROM silver.stock FOR VERSION AS OF 'staging';
+SELECT MIN(trade_date) first_day, MAX(trade_date) last_day, MAX(high) month_high, MIN(low) month_low, SUM(volume) month_volume
+FROM silver.stock WHERE symbol='2330' AND trade_date >= date '2026-07-01' AND trade_date < date '2026-08-01';
+-- first_day=2026-07-01, last_day=2026-07-31, month_high=506.41, month_low=449.46, month_volume=245648623
+
+SELECT open, high, low, close, volume FROM gold.monthly_ohlcv WHERE symbol='2330' AND year_month=date '2026-07-01';
+-- open=450.45, high=506.41, low=449.46, close=499.23, volume=245648623
 ```
 
-**（2026-08-07 已實測確認）**：這個語法可行，Athena 直接吃 branch 名稱字串，不需要先查 snapshot_id 再代入。當次跑出來 staging 筆數為 786，內容與 main 一致（因為當時跑的是乾淨資料，Write 階段本身不做品質過濾，Audit／項目 4 還沒接上）。
+`high`/`low`/`volume` 與 Silver 明細手動聚合完全一致。`audit_log` 這輪新增兩筆：`307223448062407430`（`success=false`，前述誤觸發的污染批次）與 `6301798231775002437`（`success=true`，清除後的真正乾淨批次）——連同意外插曲本身也是 spec §7 第三條驗收標準（稽核紀錄可查到「哪個批次被擋下、觸犯哪條規則」）的額外佐證，即使起因不是刻意注入的髒資料。
 
-## 參考結果
+## Round 2：含髒資料端到端
 
-**（2026-08-07 執行）**：`silver.stock` 執行前基準為 786 筆，main snapshot_id = `1685447700659273070`，`$refs` 只有 `main` 一條。
+```bash
+uv run python src/ingestion/generate_stock_data.py \
+  --years 0.3 --dirty-rate 0.4 --seed 1 \
+  --output-dir /tmp/dirty-check-e2e
+# 79 個交易日、249 列
+aws s3 sync /tmp/dirty-check-e2e/ s3://danny-data-engineering/raw/market/stock/ --profile dt-lab-long-term-mfa --region ap-northeast-1
+aws glue start-job-run --job-name slice0-bronze-stock --region ap-northeast-1 --profile dt-lab-long-term-mfa   # 88 秒 SUCCEEDED
+aws glue start-job-run --job-name slice0-silver-stock --region ap-northeast-1 --profile dt-lab-long-term-mfa   # 136 秒 SUCCEEDED
+```
 
-依上面流程連續觸發兩輪 `slice0-silver-stock`，兩輪 Job 都 `SUCCEEDED`（`ErrorMessage: null`），確認 Glue Catalog 完整支援 `CREATE BRANCH`：
+CloudWatch：
 
-| | main snapshot_id | staging snapshot_id | staging 的 parent_id |
-| --- | --- | --- | --- |
-| 執行前 | `1685447700659273070` | （不存在） | — |
-| 第 1 輪後 | `1685447700659273070`（不變） | `8354526197036792519` | `1685447700659273070`（main） |
-| 第 2 輪後 | `1685447700659273070`（不變） | `8009323305660367987` | `8354526197036792519`（上一輪的 staging，不是 main） |
+```
+[Audit] staging validation success=False
+[Audit] FAILED: expect_column_values_to_not_be_null column=symbol
+[Audit] FAILED: expect_column_values_to_be_in_set column=symbol
+[Audit] FAILED: expect_column_values_to_not_be_null column=trade_date
+[Audit] FAILED: expect_column_values_to_not_be_null column=open
+[Audit] FAILED: expect_column_values_to_be_between column=open min_value=0.0
+[Audit] FAILED: expect_column_values_to_not_be_null column=high
+[Audit] FAILED: expect_column_values_to_be_between column=high min_value=0.0
+[Audit] FAILED: expect_column_values_to_not_be_null column=low
+[Audit] FAILED: expect_column_values_to_be_between column=low min_value=0.0
+[Audit] FAILED: expect_column_values_to_not_be_null column=close
+[Audit] FAILED: expect_column_values_to_be_between column=close min_value=0.0
+[Audit] FAILED: expect_column_values_to_not_be_null column=volume
+[Audit] FAILED: expect_column_pair_values_a_to_be_greater_than_b column_A=high column_B=low
+[Audit] FAILED: expect_compound_columns_to_be_unique column_list=[symbol, trade_date]
+[Publish] BLOCKED: batch 319170298987995934 failed audit, main not updated, 14 violations logged to audit_log
+```
 
-兩輪執行後 `SELECT COUNT(*) FROM silver.stock` 皆維持 786，main 完全沒被動到。第 2 輪 staging 新 snapshot 的 `parent_id` 接的是「上一輪 staging 自己的 snapshot」而非 main，具體驗證了 `CREATE BRANCH IF NOT EXISTS` 對已存在的 branch 是 no-op、不會重置 HEAD，main 全程是 staging 每個新 snapshot 的祖先——未來項目 5 的 `fast_forward` 依賴的正是這個性質。
+14 條規則全數觸發（`--years 0.3 --dirty-rate 0.4 --seed 1` 涵蓋全部六種髒資料 kind，對應 §6 四個維度），符合 [slice1-gx-audit-verification.md](slice1-gx-audit-verification.md) 的 `TestSuiteCatchesDirtyData` 涵蓋範圍。
 
-「直接讀 staging branch 資料內容」（`FOR VERSION AS OF 'staging'`）這次沒有實測，只驗證了 metadata table（`$refs`/`$snapshots`）+ 筆數不變這三點，這三點已經足以確認 branch 寫入機制在正式環境正確運作。
+### Round 2 參考結果
+
+```sql
+SELECT * FROM "silver"."stock$refs";
+-- staging | BRANCH | 319170298987995934   <- 有推進
+-- main    | BRANCH | 6301798231775002437  <- 完全沒變，與 Round 1 結束時一致
+
+SELECT COUNT(*) FROM silver.stock;         -- 825，維持 Round 1 發佈的乾淨結果
+SELECT COUNT(*) FROM gold.monthly_ohlcv;   -- 42，未受影響（沒有重跑 Gold，因為 Silver main 沒變，重跑只會得到相同結果）
+
+SELECT batch_id, success, audited_at FROM silver.audit_log ORDER BY audited_at DESC LIMIT 1;
+-- 319170298987995934 | false | 2026-08-19 08:25:23 UTC
+```
+
+main 在已發佈過一次的狀態下，面對新一輪髒資料，指標完全沒有被移動——這是 spec §7 第一條驗收標準（灌壞資料要被擋下、正式 `silver.stock` 不受影響）的直接證據。
+
+**Bronze 保留原樣、可重跑**：`bronze.stock` 從 5593 成長到 6430（含這輪 249 列髒資料 + 與既有分區重疊日期的重複落地，符合 Bronze append-only 設計），驗證了「Bronze 原樣保留，壞資料進得去 Bronze 但出不了 Silver」。
+
+**已知風險清理**：這輪髒資料裡的 `invalid_symbol`/`invalid_date`/打在 `symbol`/`date` 上的 `empty_field` 又產生了 33 列新的永久污染（同 Round 1 意外插曲的成因）。驗證完成後執行同一條 `DELETE` 清理，確認 0 列殘留，避免留給下一次驗證繼續誤判。
+
+## 對應 spec §7 驗收標準
+
+- [x] 故意灌一批違反 §6 任一規則的資料，能被 Gate 擋下，且正式 `silver.stock` 不受影響（Bronze 仍保留原樣，可重跑）—— Round 2
+- [x] 正常乾淨資料能正確通過 Audit 並 publish 到正式 Silver，Gold 層數字與 Slice 0 驗收邏輯一致 —— Round 1
+- [x] 稽核紀錄可在 Athena 查到「哪個批次被擋下、觸犯哪條規則」—— Round 1（意外插曲批次）與 Round 2 皆有完整 `violations` 明細對應 CloudWatch 輸出
 
 ## 相關文件
 
-- [docs/specs/slice1-quality-contract.md](../specs/slice1-quality-contract.md) §3.2 / §4 項目 3 — 這份 runbook 對應的決策與待驗收項目
-- [scripts/verify_wap_branch_write.py](../../scripts/verify_wap_branch_write.py) — 同一套 branch 寫入機制在本機（簡化 schema、Iceberg Hadoop catalog）的獨立驗證腳本，這份文件是它在正式環境的對應版本
-- [slice0-verification.md](slice0-verification.md) — Bronze/Silver/Gold 三層的基本查詢驗證；本文件延伸其中「Silver 驗證」一節，改為驗證 WAP staging 行為
-- [aws-access-via-bastion.md](aws-access-via-bastion.md) — 如何取得 AWS 存取權限、如何觸發 Glue Job
+- [docs/specs/slice1-quality-contract.md](../specs/slice1-quality-contract.md) §4 項目 8 / §7 — 這份 runbook 對應的驗收項目
+- [slice1-wap-verification.md](slice1-wap-verification.md) — Write 階段（staging branch）個別驗證
+- [slice1-gx-audit-verification.md](slice1-gx-audit-verification.md) — Audit 階段（GX on Spark on Glue）個別驗證
+- [slice1-publish-verification.md](slice1-publish-verification.md) — Publish/擋下 + 稽核紀錄落地個別驗證，「意外插曲」章節記錄了本文件 Round 1/2 都再次踩到的同一個 Bronze 永久污染問題
+- [generate-stock-data.md](generate-stock-data.md) — 髒資料產生方式與涵蓋的六種 kind
+- [slice0-verification.md](slice0-verification.md) — Slice 0 對應的定案驗證文件，本文件延續同樣的角色定位到 Slice 1

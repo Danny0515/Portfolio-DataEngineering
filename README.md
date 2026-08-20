@@ -9,6 +9,7 @@
 - **完全透過 [Claude Code](https://claude.com/claude-code) 開發**：從架構規劃、Spec 撰寫、Terraform 基礎設施、PySpark 轉換邏輯、IAM/Lake Formation 權限設計到 ADR／文件產出，皆由使用者與 Claude Code 協作完成。  
 - **SDD**：完整的文件架構設計，方便 AI Agent 開發時能依規格與既有決策脈絡進行，不需臆測需求。  
 - **共智(Collective Intelligence)**：透過文件架構與 Agent 執行規則等文件，把開發過程中的知識與決策脈絡留在專案本身，而不是留在開發者腦內，確保接手的開發者或其他 AI  都能單憑這些文件跟程式脈絡掌握專案全貌並延續開發。
+- **Harness Engineering 的可驗證證據**：`docs/`（Spec、ADR、Pattern Card、Decision Log）與 `ai/contexts/`（Agent 執行規則、開發 Session 紀錄）完整保留了規劃到實作的每個判斷與脈絡。
 
 ## 目錄 (Table of Contents)
 
