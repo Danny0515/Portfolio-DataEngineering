@@ -34,31 +34,15 @@ resource "aws_lakeformation_permissions" "glue_market_tables" {
   }
 }
 
-# Being a Lake Formation Data Lake Admin (see get-data-lake-settings) grants
-# the *ability to manage* permissions, not implicit SELECT access to table
-# data — confirmed the hard way via Athena's
-# "Relation contains no accessible columns" error when querying bronze.stock
-# as this user despite admin status. Read-only grant for manual verification
-# (e.g. Athena smoke tests), separate from the Glue Job's read/write grant above.
-resource "aws_lakeformation_permissions" "athena_reader_database" {
-  for_each = toset(var.glue_databases)
-
-  principal   = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:user/${var.athena_reader_user_name}"
-  permissions = ["DESCRIBE"]
-
-  database {
-    name = each.value
-  }
-}
-
-resource "aws_lakeformation_permissions" "athena_reader_tables" {
-  for_each = toset(var.glue_databases)
-
-  principal   = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:user/${var.athena_reader_user_name}"
-  permissions = ["DESCRIBE", "SELECT"]
-
-  table {
-    database_name = each.value
-    wildcard      = true
-  }
-}
+# This project's chief-architect account is deliberately NOT declared here.
+# Its permission boundary is governed at the AWS org level (Lake Formation
+# Data Lake Admin status), not by this project's Terraform — RULE-003
+# explicitly exempts it (see ADR-0005). We tried declaring an explicit grant
+# for it first, but Lake Formation self-grant behavior for a Data Lake Admin
+# auto-escalates any grant made by that principal to itself into "ALL" plus
+# a broader grant-option set on read-back, regardless of what's requested —
+# so no Terraform-declared permission list ever converges to a stable
+# `terraform plan` (confirmed empirically during rollout). Managing it here
+# would mean permanent diff noise, not real drift. See ADR-0005 for the full
+# history and the decision to keep this principal's identity out of version
+# control entirely (avoids committing a real person's email in `.tf`).

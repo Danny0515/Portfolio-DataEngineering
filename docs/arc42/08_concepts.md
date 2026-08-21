@@ -5,13 +5,13 @@
 ## 目錄
 
 - [8.1 Medallion Architecture 總覽](#81-medallion-architecture-總覽)
-- [8.2 Bronze 層：設計原則](#82-bronze-層設計原則)
-- [8.3 Silver 層：設計原則](#83-silver-層設計原則)
-- [8.4 Gold 層：設計原則](#84-gold-層設計原則)
+  - [8.1.1 Bronze 層：設計原則](#811-bronze-層設計原則)
+  - [8.1.2 Silver 層：設計原則](#812-silver-層設計原則)
+  - [8.1.3 Gold 層：設計原則](#813-gold-層設計原則)
 - [8.5 寫入模式策略（Append vs Overwrite）](#85-寫入模式策略append-vs-overwrite)
 - [8.6 Partition 設計](#86-partition-設計)
-- [8.7 目前已實作的具體案例：Market Data / Stock（Slice0）](#87-目前已實作的具體案例market-data-stockslice0)
-- [8.8 與 ADR 的關係 / 尚未涵蓋的範圍](#88-與-adr-的關係-尚未涵蓋的範圍)
+- [8.7 目前已實作的具體案例：Market Data / Stock（Slice0）](#87-目前已實作的具體案例market-data--stockslice0)
+- [8.8 與 ADR 的關係 / 尚未涵蓋的範圍](#88-與-adr-的關係--尚未涵蓋的範圍)
 
 ---
 
@@ -29,12 +29,12 @@
 
 所有層都用同一套 Iceberg/Glue Catalog 設定執行（`glue_catalog`，見 [glue.tf](../../infra/environments/dev/glue.tf) 的 `local.iceberg_spark_conf`），PySpark 程式放在 `src/transform/`。
 
-## 8.2 Bronze 層：設計原則
+### 8.1.1 Bronze 層：設計原則
 
 - **職責邊界**：只做 provenance 標記（`ingest_time`、`source_file`），不做任何有副作用的轉換（去重、過濾負值/空值等）、不宣告 partition。全欄位以字串讀取（`inferSchema=false`），schema 因此完全固定，不受來源資料髒污程度影響。刻意設計成這麼薄的理由見 [ADR-0002](../architecture/adr/0002-medallion-layering.md)，不在此重複展開。
 - **寫入模式**：`DESCRIBE TABLE` 判斷表格是否存在，不存在則 `create()`，存在則 Spark `.append()`。重跑會累積重複列，這是刻意接受的行為，吸收責任在 Silver（見 8.5）。
 
-## 8.3 Silver 層：設計原則
+### 8.1.2 Silver 層：設計原則
 
 > Silver 是整個湖倉「什麼算乾淨資料」規則的唯一集中維護點，職責固定包含以下三件事：
 
@@ -46,14 +46,14 @@
 
 **具體案例**：`silver.stock`（[`src/transform/silver_stock.py`](../../src/transform/silver_stock.py)）自然鍵 `(symbol, date)`；型別校正 `open/high/low/close` → `decimal(10,2)`、`date` → Spark `date`、`volume` → `integer`；欄位標準化 `date` → `trade_date`；另加品質過濾（非空非負、`high >= low`，對應 [spec §6](../specs/slice0-batch-market-data.md)），處理順序「去重 → 型別 cast → 品質過濾」，確保過濾套用在已轉型的欄位上。未來新增資料域各自訂定自然鍵與型別規則，但仍遵守這三件事的職責邊界。
 
-## 8.4 Gold 層：設計原則
+### 8.1.3 Gold 層：設計原則
 
 - **職責邊界**：對外可查詢的業務聚合寬表，把 Silver 的明細資料依業務需求聚合成更粗粒度的檢視。
 - **選粒度的原則**：聚合粒度必須比上游明細粒度更粗——跟 Silver 自然鍵一樣細的話，聚合就是每組固定 1 列的 no-op，無法驗證聚合邏輯，也不是 Gold 層該做的事。
 - **寫入模式**：全量覆寫（`createOrReplace()`），理由同 Silver（見 8.5）。
 - **具體案例**：`gold.monthly_ohlcv`（[`src/transform/gold_monthly_ohlcv.py`](../../src/transform/gold_monthly_ohlcv.py)）把 Silver 的 `(symbol, trade_date)` 明細聚合成 `(symbol, year_month)` 月頻寬表：`open`/`close` 用 `min_by`/`max_by`（依 `trade_date` 取該月最早/最晚交易日的值），`high`/`low` 用 `max`/`min`，`volume` 用 `sum`。用 `min_by`/`max_by` 而非 `first()`/`last()`，是因為分組後每組多列時 `first()`/`last()` 排序不保證，容易安靜地拿到錯值。
 
-## 8.5 寫入模式策略（Append vs Overwrite）
+## 8.2 寫入模式策略（Append vs Overwrite）
 
 | 層級 | 寫入模式 | 字面 Spark 語意 | 適用範圍 |
 | --- | --- | --- | --- |
@@ -67,7 +67,7 @@
 
 > **範圍限制**：這個「Bronze=append／Silver,Gold=全量覆寫」的寫入模式策略，適用對象是像市場行情這種「批次、不可變歷史事實」的資料域。Slice 2 的交易資料走 CDC + upsert，屬於不同的寫入模式策略，屆時會有自己的 ADR/spec，不套用本節規則。
 
-## 8.6 Partition 設計
+## 8.3 Partition 設計
 
 - **原則**：partition 粒度依實際資料量決定，避免產生過多小 partition。例如 stock 資料: 3 檔 symbol × 約 1 年交易日 ≈ 1000 列量級，選擇月粒度而非日粒度。
 - **Silver/Gold**：用 Iceberg 的 hidden partitioning，`partitionedBy(months(<date 欄位>))`——兩層的日期欄位（`trade_date`／`year_month`）都已經是型別校正後的 `date` type，可以直接套用 `months()` transform。
@@ -75,7 +75,7 @@
 - **透過 `createOrReplace()` 自然生效**：Silver/Gold 每次執行都是全量覆寫（見 8.5），`partitionedBy(...)` 直接寫進 `.writeTo(...)` chain 即可在下次執行時套用新的 partition spec，不需要額外的 `ALTER TABLE` 遷移步驟。
 - 完整決策紀錄見 [ADR-0003](../architecture/adr/0003-append-vs-overwrite.md)。
 
-## 8.7 目前已實作的具體案例：Market Data / Stock（Slice0）
+## 8.4 目前已實作的具體案例：Market Data / Stock（Slice0）
 
 上面幾節是通用架構規則，本節整理「目前唯一已實作」的具體實例，方便對照抽象規則與實際程式碼；實際執行流程圖見 [06. Runtime View](06_runtime_view.md)：
 
@@ -87,7 +87,7 @@
 
 未來新增資料域（如期貨、交易資料、使用者行為）時，應該先參考 8.1~8.6 的通用規則設計三層職責，再視該資料域的特性（自然鍵、型別、聚合粒度、寫入模式策略、partition 粒度）填入具體實作，不需要重新討論分層邊界本身。
 
-## 8.8 與 ADR 的關係 / 尚未涵蓋的範圍
+## 8.5 與 ADR 的關係 / 尚未涵蓋的範圍
 
 - 本章是 ADR-0002（分層職責）與 ADR-0003（寫入模式、partition 設計）決策的落地細節，取捨理由仍以這兩份 ADR 為準，本章不重複展開。
 - **Athena 查詢驗證**（spec §4 item 8）不在本章範圍，是實際部署後的驗證步驟，不是轉換邏輯的一部分，見 [docs/runbooks/slice0-verification.md](../runbooks/slice0-verification.md)。

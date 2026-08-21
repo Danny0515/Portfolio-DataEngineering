@@ -16,6 +16,8 @@
 - [開發 Data Contract 轉換成 GX 設定的功能](#開發-data-contract-轉換成-gx-設定的功能)
 - [開發讀取 Data Contract 轉換成配置的功能](#開發讀取-data-contract-轉換成配置的功能)
 - [把 Pattern 封裝成 Skill](#把-pattern-封裝成-skill)
+- [arc42 08_concepts.md 內容通用化](#arc42-08_conceptsmd-內容通用化)
+- [Lake Formation／IAM 權限 drift 偵測自動化](#lake-formationiam-權限-drift-偵測自動化)
 
 ---
 
@@ -56,3 +58,23 @@
 
 ### 執行內容
 留到整個 plan.md 規劃的所有 Slice/Phase 都完成後再評估是否實踐；除非中途某個 Pattern 需要被大量複現（多個 Slice 重複套用同一樣式），才提前考慮實作對應 skill。
+
+---
+
+## arc42 08_concepts.md 內容通用化
+
+### 背景與原因
+`docs/arc42/08_concepts.md` 目前 8.1~8.5 節（含 8.4「目前已實作的具體案例」）都以唯一已實作的 stock（Slice0/1）為例撰寫，尚未驗證這套分層規則能否原樣套用到其他資料域；TOC 的錨點連結也曾寫錯（標題含 `/` 時應產生 `--` 雙連字號而非單一 `-`），已由使用者手動修正。
+
+### 執行內容
+待 Slice2（trade 資料域）實作完成、有第二個具體案例可對照後，回頭檢視本文件是否需要從「stock 專屬描述」抽象成真正跨資料域的通用規則；目前保留現有 stock 階段的具體描述，作為後續改寫時的參考起點，不現在動。
+
+---
+
+## Lake Formation／IAM 權限 drift 偵測自動化
+
+### 背景與原因
+處理 Slice1 遺留的 `athena_reader_tables["bronze"]` drift 時，發現目前只能靠人工跑 `terraform plan` + `aws lakeformation list-permissions` 交叉比對，才能確認實際授權跟 `.tf` 宣告是否一致；隨 Glue Job／資料域增加（Slice2 起新增 trade），純人工比對會越來越吃力。討論後認為業界作法是 CI 排程 drift 偵測（`terraform plan` on cron）＋ AWS IAM Access Analyzer 的 unused/external access findings，而非手寫維護一份權限矩陣文件；曾考慮新增 `query_lakeformation_permissions` skill 做即時查詢輔助，但屬於 Slice4 DataOps（CI/CD、可觀測性）範疇，不在目前階段實作。
+
+### 執行內容
+待 Slice4 規劃 CI/CD 與可觀測性時一併評估：(1) 是否排程化 `terraform plan` drift 偵測、(2) 是否啟用 AWS IAM Access Analyzer 的 unused/external access findings、(3) 是否仍需要一個查詢型 skill（如 `query_lakeformation_permissions`）作為輔助工具，三者一起決定，不個別零散導入。

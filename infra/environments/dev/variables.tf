@@ -28,8 +28,3 @@ variable "glue_databases" {
   default     = ["bronze", "silver", "gold"]
 }
 
-variable "athena_reader_user_name" {
-  description = "需要透過 Athena 人工查詢 medallion 表格的 IAM user 名稱（Lake Formation 的 DESCRIBE/SELECT 權限會 grant 給這個 principal；Lake Formation Data Lake Admin 不會自動有資料讀取權，需要額外 grant）"
-  type        = string
-  default     = "dannyhuang@cathayholdings.com.tw"
-}

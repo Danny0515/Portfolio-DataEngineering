@@ -19,3 +19,4 @@
 | [ADR-0002](../architecture/adr/0002-medallion-layering.md) | 為何分 Bronze/Silver/Gold 三層 | ✅ `Accepted` |
 | [ADR-0003](../architecture/adr/0003-append-vs-overwrite.md) | 批次管線的寫入模式（Append vs 全量覆寫）與 Partition 設計 | ✅ `Accepted` |
 | [ADR-0004](../architecture/adr/0004-wap-quality-gate.md) | 為何用 WAP (Write-Audit-Publish) Pattern 而非事後檢核 | ✅ `Accepted` |
+| [ADR-0005](../architecture/adr/0005-project-admin-permission-exemption.md) | 專案總架構師帳號的 Lake Formation 權限不受本專案 Terraform 管理 | ✅ `Accepted` |

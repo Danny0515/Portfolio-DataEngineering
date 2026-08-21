@@ -14,6 +14,10 @@
 
 **對 Agent 的行為約束**：規劃或建議任何需要雲端憑證的操作（AWS CLI、Terraform apply 等）時，一律先跑 MFA session 檢查/建立流程；不要預設本機沒有 AWS 存取權限而直接跳過 MFA、改走 bastion。
 
+### 專案架構外的既有帳號
+
+這個 AWS 帳號存在組織既有、非本專案建立的人身帳號（總架構師的特權帳號，Lake Formation Data Lake Admin），其權限邊界由組織層級治理，不屬於「本專案架構」，因此不受 RULE-001／RULE-003 管轄，也不由本專案 Terraform 宣告或追蹤。完整理由見 [ADR-0005](docs/architecture/adr/0005-project-admin-permission-exemption.md)。
+
 ## 專案規則 (Project Rules)
 
 所有 Agent 行為規則統一記錄於 [ai/contexts/rules.md](ai/contexts/rules.md)，**每次操作前必須遵守，不因對話情境而例外**。新增規則一律透過 `add_project_rule` skill 進行。目前已定義：

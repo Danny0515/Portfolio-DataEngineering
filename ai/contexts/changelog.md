@@ -75,7 +75,7 @@
 - [x] 新增 ADR-0001（`docs/architecture/adr/0001-use-iceberg.md`，為何用 Iceberg 而非 Parquet on S3）與 ADR-0002（`0002-medallion-layering.md`，為何分 Bronze/Silver/Gold 三層），同步 `docs/arc42/09_architecture_decisions.md` 決策總表
 - [x] 本機未裝過 Terraform、Homebrew 因系統 Command Line Tools 過舊裝不了，改用官方 release 下載靜態執行檔到 `~/.local/bin/terraform`（已驗證 checksum）繞過 CLT 依賴；後續以 `AWS_PROFILE=dt-lab-long-term-mfa` 本機直接 `terraform apply`
 - [x] 首次觸發 Glue Job 失敗：`Insufficient Lake Formation permission(s): Required Describe on bronze`——IAM policy 正確但這帳號的 Glue Data Catalog 疊了一層 Lake Formation 授權，`CreateDatabaseDefaultPermissions`/`CreateTableDefaultPermissions` 皆為空，新建 database 不會像舊資料庫一樣自動繼承 `IAM_ALLOWED_PRINCIPALS`；補上 `aws_lakeformation_permissions`（grant 給 Glue Job 執行角色），重跑成功，Iceberg snapshot 顯示 `total-records: 786`，與本機 raw CSV 786 筆一致
-- [x] 使用者用 Athena 人工查詢又踩到第二次 Lake Formation 坑（`Relation contains no accessible columns`）：用 CLI 拆解測試（`SHOW COLUMNS` 成功、`SELECT *` 全部欄位不可存取）排除 SQL 語法問題，確認 Lake Formation Data Lake Admin 身份只代表能管理權限、不代表自動有資料 SELECT 權限；補上第二組 grant 給人身帳號 `dannyhuang@cathayholdings.com.tw`，查詢恢復正常
+- [x] 使用者用 Athena 人工查詢又踩到第二次 Lake Formation 坑（`Relation contains no accessible columns`）：用 CLI 拆解測試（`SHOW COLUMNS` 成功、`SELECT *` 全部欄位不可存取）排除 SQL 語法問題，確認 Lake Formation Data Lake Admin 身份只代表能管理權限、不代表自動有資料 SELECT 權限；補上第二組 grant 給人身帳號，查詢恢復正常
 - [x] 新增 RULE-003（IAM 權限設定一律遵照 AWS 官方 best practice，與 plan.md/專案需求衝突時才討論特例並留 ADR），直接呼應本次兩次 Lake Formation 除錯過程
 - [x] 依使用者臨時要求，將 `bronze`/`silver`/`gold` 三個 Glue database 的 `description` 都改為 `danny-test` 並重新部署
 
@@ -314,4 +314,34 @@
 ### Notes
 
 > verification runbook 採「彙總文件 + 衛星文件」慣例：`slice{N}-verification.md` 是該 Slice 定案的驗收證據入口，個別機制（WAP/GX Audit/Publish）各自開衛星 runbook，避免單一大檔案隨機制增加而失控——之後每個 Slice 收尾都比照此結構。
+
+## Session 012 — 2026-08-21
+
+- **Engineer**: Danny
+- **Role**: Data Engineer
+- **LLM Used**: Claude Code (claude-sonnet-5)
+- **Module**: slice2-planning
+
+### Completed
+
+- [x] (承接 Session 011 Next Step)規劃 Slice 2：依 plan.md／execution-roadmap.md／既有 Slice0-1 spec 模式撰寫 `docs/specs/slice2-cdc-trade-pipeline.md`，評估後發現一次引入 OLTP/Kafka/CDC/串流引擎四個新元件違反「Slice 寧可切小」紀律，依使用者確認拆分為 `docs/specs/slice2a-cdc-ingestion.md`（CDC 擷取：來源 OLTP DB → MSK topic）與 `docs/specs/slice2b-streaming-upsert.md`（Kafka → Bronze append + Silver MERGE INTO upsert），切分點在串流運算引擎前；移除 slice2a 清單中承接 Session011 已解決的 3 個 0.x 收尾項目
+- [x] (承接 Session 006／011 Next Step)`docs/arc42/08_concepts.md` 的「Data Quality 設計原則」一節，改列入 `docs/TODO.md`「arc42 08_concepts.md 內容通用化」項目，留待 Slice2 trade 資料域實作完成、有第二個具體案例可對照後再一併通用化重寫，不在本次直接動筆
+- [x] 新增 `docs/TODO.md`「Lake Formation／IAM 權限 drift 偵測自動化」項目：討論業界 SRE 對 IAM/Lake Formation 的治理作法（CI 排程 drift 偵測、IAM Access Analyzer unused-access findings）後，決定將對應 skill 開發留待 Slice4 DataOps 一併評估
+- [x] (承接 Session 008 Next Step)徹底解決 `aws_lakeformation_permissions.athena_reader_tables["bronze"]` 的 drift：查證得知該人身帳號是專案總架構師的特權帳號（Lake Formation Data Lake Admin），權限邊界屬組織治理範疇；實測發現 AWS 對 Data Lake Admin 的自我授權有自動升級行為（任何宣告的權限清單讀回來都會被展開成更廣的集合，永遠無法收斂），因此最終決定完全不由本專案 Terraform 宣告或追蹤此 principal 的權限，改用 `terraform state rm` 移出 state（不 destroy，AWS 端實際授權不受影響），同時移除 `variables.tf` 裡硬寫的真人 email；`terraform plan` 最終收斂為 `No changes`
+- [x] 新增 [ADR-0005](../../docs/architecture/adr/0005-project-admin-permission-exemption.md)（為何專案總架構師帳號的 Lake Formation 權限不受本專案 Terraform 管理），含完整 rollout 過程發現；同步 `docs/arc42/09_architecture_decisions.md` 決策總表
+- [x] 精簡 `ai/contexts/rules.md`：RULE-001／RULE-003 標題與規則本文加上「本專案架構」範圍限定，移除原本額外加的「已拍板的例外」子句；`CLAUDE.md`「環境限制」新增「專案架構外的既有帳號」小節取代之，降低每次讀取規則的 token 成本
+- [x] 刷新 `ai/contexts/infra_dev.md` 快照（移除已不存在的 `athena_reader_*`/`project_admin_*` 資源、更新日期、補充架構師帳號不受追蹤的說明）；同步修正 `slice2a-cdc-ingestion.md` 的 ADR 編號（`0005`/`0006` → `0006`/`0007`，因 `0005` 被 Lake Formation 決策佔用）
+- [x] `docs/runbooks/slice1-verification.md` 已由使用者人工驗證完畢並 commit（Session 011 刻意排除在外的項目，本次確認結案）
+
+### Related ADRs
+
+- 新增 [ADR-0005](../../docs/architecture/adr/0005-project-admin-permission-exemption.md)：為何專案總架構師帳號的 Lake Formation 權限不受本專案 Terraform 管理
+
+### Next Steps
+
+- [ ] 依 [docs/specs/slice2a-cdc-ingestion.md](../../docs/specs/slice2a-cdc-ingestion.md) 開始 Slice 2a 實作：先拍板 §3 待確認事項（交易來源／CDC 擷取方式／MSK 佈署形態與生命週期／序列化格式與 Schema Registry），再依 §4 實作項目清單展開
+
+### Notes
+
+> Slice 2 原規劃為單一 spec，但草稿完成後評估一次引入 OLTP/Kafka/CDC/串流引擎四個新元件，違反 execution-roadmap.md §3「Slice 寧可切小」的紀律，經使用者確認後依原 spec §8 風險段落建議，以「串流運算引擎」為界拆成 2a（CDC 擷取：來源 DB → Kafka，含 VPC/RDS/MSK/MSK Connect 等本專案首次引入的網路層與常駐計費資源）與 2b（Kafka → Iceberg upsert，含 MERGE INTO 語意與 Slice0 的 append 對照），兩片各自可獨立 demo，ADR／Pattern Card／契約版本也依此切分歸屬。
 
