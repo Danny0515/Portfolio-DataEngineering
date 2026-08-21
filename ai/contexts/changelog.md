@@ -345,3 +345,29 @@
 
 > Slice 2 原規劃為單一 spec，但草稿完成後評估一次引入 OLTP/Kafka/CDC/串流引擎四個新元件，違反 execution-roadmap.md §3「Slice 寧可切小」的紀律，經使用者確認後依原 spec §8 風險段落建議，以「串流運算引擎」為界拆成 2a（CDC 擷取：來源 DB → Kafka，含 VPC/RDS/MSK/MSK Connect 等本專案首次引入的網路層與常駐計費資源）與 2b（Kafka → Iceberg upsert，含 MERGE INTO 語意與 Slice0 的 append 對照），兩片各自可獨立 demo，ADR／Pattern Card／契約版本也依此切分歸屬。
 
+## Session 013 — 2026-08-21
+
+- **Engineer**: Danny
+- **Role**: Data Engineer
+- **LLM Used**: Claude Code (claude-sonnet-5)
+- **Module**: slice2a-cdc-ingestion
+
+### Completed
+
+- [x] (承接 Session 012 Next Step)完成 `docs/specs/slice2a-cdc-ingestion.md` §3 待確認事項全數拍板：§3.1 交易來源選 RDS PostgreSQL（`db.t4g.micro` + logical replication，理由是唯一能撐住「CDC vs 定時輪詢」對照組敘事的選項），交易資料模型採 plan.md §4.2 範例為起點並註記僅為規劃期臨時參考、非最終定案
+- [x] §3.2 CDC 擷取方式選 Debezium + MSK Connect，補上「風險與降級路徑」段落：plugin 打包／VPC 連線／IAM 授權三項未驗證，卡關時降級為 DMS 或自架需使用者確認並留 ADR
+- [x] §3.3 拍板 (a) MSK Provisioned、(b) 用完即拆，並記錄「為何不會有 Slice1 branch 表式證據遺失風險」的完整理由（RDS 為可重現輸入非證明成果、Kafka topic 是中繼管線非永久稽核記錄、VPC/RDS/MSK/Connect 綁同一 tfstate 一起拆建不會有孤兒 replication slot）
+- [x] §3.4 拍板 Avro + AWS Glue Schema Registry、相容性模式 `BACKWARD`、違約訊息送 DLQ；發現並修正相容性模式的描述錯誤：BACKWARD 實際擋下的是「新增沒有 default 值的必填欄位」，不是原先誤植的「刪除必填欄位」，同步修正 §4 項目 9 的驗證案例描述
+
+### Related ADRs
+
+- 無新增 ADR（§3 決策目前記錄在 spec 文件本身；§9 規劃的 `ADR-0006`/`ADR-0007` 待 Slice 2a 收尾時才產出）
+
+### Next Steps
+
+- [ ] 依 `docs/specs/slice2a-cdc-ingestion.md` §4 實作項目清單展開實作，從項目 1（網路層 spike：建最小 VPC + 私有子網 + S3 VPC Endpoint 再 destroy，確認 Control Tower SCP 是否限制 VPC/IGW/NAT）開始
+
+### Notes
+
+> §3.2／§3.4 討論過程中釐清了兩個容易誤解的技術概念：(1) DMS 雖是 AWS 原生代管服務但屬專有黑盒引擎，可控性反而低於「代管 infra + 開源 Debezium」的 MSK Connect 組合；(2) Schema Registry 的 BACKWARD 相容性模式實際規則是「允許刪除欄位、僅新增有 default 值欄位」，原 spec 誤寫成「禁止刪除必填欄位」，已一併修正，避免 §4 項目 9 的驗證步驟撲空。
+

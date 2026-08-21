@@ -3,7 +3,7 @@
 > 對應 [execution-roadmap.md](../../execution-roadmap.md) Slice 2 的前半段。
 > 對應 [plan.md](../../plan.md) §7 分階段交付：Phase 1b（Streaming 主幹）。
 > 後半段見 [slice2b-streaming-upsert.md](slice2b-streaming-upsert.md)。
-> 狀態：**§3 待確認事項尚未拍板** — 待 §3 全數決定後，§4 實作項目清單才成為實作依據。
+> 狀態：**§3 待確認事項已全數拍板** — 以下 §4 實作項目清單即為實作依據。
 
 ---
 
@@ -55,20 +55,26 @@
 
 ### 3.1 交易來源：真 OLTP DB vs 直接 producer 寫 Kafka
 
+✅ **決定：A. RDS PostgreSQL**（`db.t4g.micro`，開啟 logical replication）。理由：唯一能讓「CDC vs 定時輪詢」的敘事有真實對照組的選項——若選 D，本片份量最重的 ADR（§9 的 `0007`）會失去論證基礎；同時維持專案一貫的「代管服務」展示定位（優於 C 的自架 EC2）。選 PostgreSQL 而非 MySQL（B）純粹因為 `pgoutput` 是 Debezium 原生支援、免裝外掛的路徑，兩者在 CDC 能力上本質相當。
+
 | 選項 | 說明 | 取捨 |
 | --- | --- | --- |
-| **A. RDS PostgreSQL**（建議） | `db.t4g.micro`，開啟 logical replication（`rds.logical_replication=1` + `pgoutput`），Debezium 支援最成熟 | 最貼近真實 CDC 情境；需處理 parameter group 與 VPC |
+| **A. RDS PostgreSQL**（已選） | `db.t4g.micro`，開啟 logical replication（`rds.logical_replication=1` + `pgoutput`），Debezium 支援最成熟 | 最貼近真實 CDC 情境；需處理 parameter group 與 VPC |
 | B. RDS MySQL | 以 binlog（`ROW` 格式）擷取 | 與 A 相當，選 A 只因 PostgreSQL 的 `pgoutput` 不需額外外掛 |
 | C. EC2 自架 PostgreSQL | 裝在既有 bastion（`danny-ops`）或新 EC2 | 省 RDS 費用，但要自己顧 DB 生命週期，且偏離「代管服務」的展示定位 |
 | D. 不用真 DB，generator 直接產 CDC 格式訊息寫入 Kafka | 成本最低、最快看到端到端 | **不建議**：CDC vs batch polling 的敘事會失去對照組——沒有真的 OLTP，就無法論證「為何不定時撈整張表」，本片最有份量的那份 ADR（§9 的 `0007`）會變成紙上談兵 |
 
-同時要決定**交易資料模型**：建議欄位對齊 plan.md §4.2 的契約範例（`trade_id` / `account_id` / `symbol` / `price` / `quantity` / `side` / `status` / `event_time` / `updated_at`），`symbol` 沿用 Slice 0 的 `2330` / `2454` / `3653` 三檔，讓兩條路徑之後（Slice 3）能 join。
+✅ **交易資料模型決定**：欄位採用 plan.md §4.2 契約範例作為起點（`trade_id` / `account_id` / `symbol` / `price` / `quantity` / `side` / `status` / `event_time` / `updated_at`），`symbol` 沿用 Slice 0 的 `2330` / `2454` / `3653` 三檔，讓兩條路徑之後（Slice 3）能 join。plan.md 的範例僅為規劃期臨時參考、非最終定案；開發過程如需調整欄位（新增/刪除/型別修正），以當下實作為準，不需回頭修改 plan.md。
 
 ### 3.2 CDC 擷取方式：Debezium on MSK Connect vs AWS DMS vs 自架 Debezium Server
 
+✅ **決定：A. Debezium + MSK Connect**。理由：符合 plan.md §2.1 / §8 主選；相對 B（DMS）維持 Debezium 開放的訊息格式與設定介面，行為可控性與可攜性較高（DMS 是 AWS 專有黑盒引擎、格式不通用）；相對 C（自架）則把 worker 維運負擔交給 AWS 代管，只需自己顧 connector 設定。
+
+**風險與降級路徑**：plugin 打包、VPC 連線、IAM 授權三項目前均未驗證，性質同 Slice 1 的 GX 依賴打包，這正是 §4 項目 6 獨立 spike 的設計目的。若 spike 過程發現環境（Control Tower SCP、VPC 限制等）無法支援這條路徑，則**重新選型**降級為 B（DMS）或 C（自架）——這屬於較大幅度變動，需使用者確認並留 ADR 記錄改選原因（呼應 §8 風險段落既有結論）。
+
 | 選項 | 說明 | 取捨 |
 | --- | --- | --- |
-| **A. Debezium + MSK Connect**（建議，plan.md 主選） | 代管的 Kafka Connect，Debezium plugin 打包成 zip 上傳 S3 後建 custom plugin | 符合藍圖；未知項：plugin 打包、VPC 連線、IAM 授權（性質同 Slice 1 的 GX 依賴打包，需要一次獨立 spike 驗證） |
+| **A. Debezium + MSK Connect**（已選） | 代管的 Kafka Connect，Debezium plugin 打包成 zip 上傳 S3 後建 custom plugin | 符合藍圖；未知項：plugin 打包、VPC 連線、IAM 授權（性質同 Slice 1 的 GX 依賴打包，需要一次獨立 spike 驗證） |
 | B. AWS DMS | 全代管，設定簡單 | 訊息格式非 Debezium 標準、可控性低，展示價值較弱 |
 | C. Debezium Server / Kafka Connect 自架於 EC2 或 ECS | 完全可控、可省 MSK Connect 費用 | 要自己顧容器與重啟，維運成本轉嫁到自己身上 |
 
@@ -78,34 +84,40 @@
 
 **(a) 佈署形態**
 
+✅ **決定：A. MSK Provisioned**。理由：小流量 side project，provisioned 最小配置比 serverless 便宜；且 serverless 與 MSK Connect 搭配有僅限 IAM 認證的限制，provisioned 沒有這層額外未知數。
+
 | 選項 | 說明 |
 | --- | --- |
-| **A. MSK Provisioned**（建議） | `kafka.t3.small` × 2 broker，最小可用配置 |
+| **A. MSK Provisioned**（已選） | `kafka.t3.small` × 2 broker，最小可用配置 |
 | B. MSK Serverless | 免管理容量，但有每 cluster-hour 的固定基礎費用，**單價明顯高於最小 provisioned 配置**；且與 MSK Connect 的搭配限制（僅 IAM 認證）需先確認 |
 
 > 實際單價需在拍板前查一次官方價目表確認（本節不寫死數字），但方向明確：小流量 side project，provisioned 最小配置比 serverless 便宜。
 
 **(b) 生命週期策略**
 
+✅ **決定：A. 用完即拆**。理由：RDS/MSK/MSK Connect 是本專案第一批常駐計費資源，用完即拆能控制成本。不會有 Slice 1 branch 表那種「刪除等於燒掉證據」的風險——RDS 是 generator 可重現的輸入資料而非證明成果，Kafka topic 在本片的定位是中繼管線而非永久稽核記錄（retention 機制本來就不是為長期留存設計）；真正需要留存的證據落在 runbook 記錄（§4 項目 8/9 的驗證紀錄）與 2b 之後落地的 Iceberg 表。
+
 | 選項 | 說明 |
 | --- | --- |
-| **A. 用完即拆**（建議） | Slice 2 的網路/MSK/RDS 獨立成一組 Terraform（獨立 state，如 `slice2.tfstate`），驗證期間 `apply`、驗證完 `destroy`；驗收證據靠 runbook 與（2b 之後）S3 上留存的 Iceberg 表 |
+| **A. 用完即拆**（已選） | Slice 2 的網路/MSK/RDS 獨立成一組 Terraform（獨立 state，如 `slice2.tfstate`），驗證期間 `apply`、驗證完 `destroy`；驗收證據靠 runbook 與（2b 之後）S3 上留存的 Iceberg 表 |
 | B. 常駐 | 隨時可 demo，但持續計費 |
 
 選 A 的話需要一份啟停 runbook（§4 項目 10），否則下次要 demo 時沒人記得開機順序。**注意 2a／2b 共用同一組資源**，這份 runbook 會被 2b 直接沿用。
 
 ### 3.4 序列化格式、Schema Registry 與違約行為
 
+✅ **決定：A. Avro + AWS Glue Schema Registry**。理由：plan.md §2.1 已定為主選，且是本片「Schema Registry 作為契約強制點」展示重點的必要條件（選 B 這個重點會整個消失）。選 Avro 而非 Protobuf（C）純粹因為 Debezium 生態預設以 Avro 為主。
+
 | 選項 | 說明 |
 | --- | --- |
-| **A. Avro + AWS Glue Schema Registry**（建議，plan.md §2.1 已定） | 契約的技術強制點：註冊相容性規則，破壞性變更在註冊時就被拒絕 |
+| **A. Avro + AWS Glue Schema Registry**（已選） | 契約的技術強制點：註冊相容性規則，破壞性變更在註冊時就被拒絕 |
 | B. JSON（無 registry） | 最簡單，但本片「Schema Registry 作為契約強制點」的展示重點會整個消失 |
 | C. Protobuf + Glue Schema Registry | 與 A 相當，選 A 只因 Debezium 生態預設以 Avro 為主 |
 
-選 A 時需一併決定：
+選 A 時一併決定：
 
-- **相容性模式**：建議 `BACKWARD`（允許新增有預設值的欄位、禁止刪除必填欄位），這正是 §7 要驗證「破壞性變更被擋下」的依據
-- **違約訊息去向**：建議送 DLQ topic（`transaction.trade.v1.dlq`）而非阻塞主流程——「壞訊息不擋住好訊息」是串流版本的 WAP 精神（對照 [ADR-0004](../architecture/adr/0004-wap-quality-gate.md) 批次版本的「壞資料不進 Gold」）
+- ✅ **相容性模式決定：`BACKWARD`**。允許刪除欄位（含必填欄位——新 schema 的讀取端本來就不找這個欄位，讀舊資料時直接忽略）、允許新增有 default 值的欄位；**禁止新增沒有 default 值的必填欄位**——舊資料沒有這個欄位又無 default 可補，這才是真正會被 Registry 擋下的破壞性變更，也是 §7／§4 項目 9 要用的測試案例（原先誤植為「刪除必填欄位」，已修正）。
+- ✅ **違約訊息去向決定：送 DLQ topic**（`transaction.trade.v1.dlq`）而非阻塞主流程——「壞訊息不擋住好訊息」是串流版本的 WAP 精神（對照 [ADR-0004](../architecture/adr/0004-wap-quality-gate.md) 批次版本的「壞資料不進 Gold」）
 
 ---
 
@@ -123,7 +135,7 @@
 | 6 | Debezium plugin 打包 spike | 依 §3.2，獨立驗證 plugin zip 打包 → S3 → custom plugin 這條路徑（比照 Slice 1 GX 依賴打包的先 spike 後主線慣例） | spike 紀錄 + runbook | ⬜ |
 | 7 | CDC connector 部署 | connector 設定（來源連線、topic 命名、Avro converter、DLQ）與 IAM/VPC 授權 | 運作中的 connector | ⬜ |
 | 8 | CDC 事件驗證 | 來源 DB 的 insert / update / delete 三種操作都出現在 topic，且帶 before/after 與來源變更序（LSN） | 驗證紀錄 | ⬜ |
-| 9 | Schema 破壞性變更驗證 | 註冊一個違反相容性規則的新版 schema（如刪除必填欄位），確認被 Registry 擋下；違約訊息進 DLQ 而非阻塞主流程 | 驗證紀錄 | ⬜ |
+| 9 | Schema 破壞性變更驗證 | 註冊一個違反相容性規則的新版 schema（如新增沒有 default 值的必填欄位），確認被 Registry 擋下；違約訊息進 DLQ 而非阻塞主流程 | 驗證紀錄 | ⬜ |
 | 10 | 資源啟停 runbook | 依 §3.3(b) 記錄建立/銷毀順序與成本注意事項（2b 沿用同一份） | `docs/runbooks/slice2-stack-lifecycle.md` | ⬜ |
 | 11 | Data Contract 第一版 | `trade_events` model：Avro schema、品質規則、違約行為（DLQ）。**SLA（`servicelevels`）留待 2b 實測後補** | `contracts/trade-events.contract.yaml` | ⬜ |
 | 12 | 端到端驗證 | 彙總 runbook + 衛星 runbook（依 execution-roadmap.md §3 命名慣例） | `docs/runbooks/slice2a-verification.md` | ⬜ |
