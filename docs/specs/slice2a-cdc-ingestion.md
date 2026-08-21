@@ -127,7 +127,7 @@
 
 | # | 項目 | 說明 | 產出 | 完成 |
 | --- | --- | --- | --- | --- |
-| 1 | 網路層 spike | 先建一個最小 VPC + 私有子網 + S3 VPC Endpoint 再 destroy，確認 Control Tower SCP 是否限制 VPC/IGW/NAT（見 §8） | spike 紀錄 | ⬜ |
+| 1 | 網路層 spike | 先建一個最小 VPC + 私有子網 + S3 VPC Endpoint 再 destroy，確認 Control Tower SCP 是否限制 VPC/IGW/NAT（見 §8） | [slice2-network-layer-verification.md](../runbooks/slice2-network-layer-verification.md) | ✅ |
 | 2 | 網路層 Terraform | VPC / 私有子網 / Security Group / VPC Endpoint（S3、Glue）正式化 | `vpc.tf`（獨立 state，依 §3.3(b)） | ⬜ |
 | 3 | 交易資料模型與 generator | 依 §3.1 決定，實作交易狀態機 generator（NEW → PARTIALLY_FILLED → FILLED/CANCELLED），對來源 DB 產生 insert/update/delete；比照 `generate_stock_data.py` 保留「注入異常」開關供後續使用 | `src/ingestion/generate_trade_data.py` | ⬜ |
 | 4 | 來源 OLTP DB | 依 §3.1 建立 RDS 與 parameter group（logical replication）、初始 schema | `rds.tf` + 建表 DDL | ⬜ |
