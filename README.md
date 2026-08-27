@@ -60,11 +60,14 @@
 | 儲存底層 | Amazon S3 |
 | Table Format | Apache Iceberg |
 | 批次運算 | AWS Glue Jobs（代管 Spark） |
-| 串流運算 | Apache Flink (Managed) |
+| 串流訊息中介 | Amazon MSK (Managed Kafka) + MSK Connect |
+| CDC 擷取 | Debezium（透過 MSK Connect） |
+| 串流運算 | Apache Flink（規劃中，Slice 2b 導入） |
 | Ad-hoc 查詢 | Amazon Athena (Trino) |
 | Catalog | AWS Glue Data Catalog + Lake Formation |
+| Schema Registry | AWS Glue Schema Registry (Avro) |
 | IaC | Terraform |
-| 資料品質 | Great Expectations（規劃中） |
+| 資料品質 | Great Expectations |
 
 完整技術選型總表（含替代方案與理由）見 [plan.md §8](plan.md#8-技術選型總表-technology-selection-summary)。
 
@@ -72,11 +75,14 @@
 
 專案採 [execution-roadmap.md](execution-roadmap.md) 定義的 Slice 順序漸進交付，目前進度：
 
-- **Slice 0 — Walking Skeleton（進行中）**：批次骨架，第三方歷史行情檔 → S3 raw landing → Bronze (Iceberg) → Silver → Gold → Athena 查得到
-  - ✅ 模擬資料 generator、Raw landing、Bronze 落地（AWS Glue Job + Iceberg + Glue Data Catalog）
-  - ⏳ Silver 轉換、Gold 聚合、Athena 正式驗證、Partition 設計
+- **Slice 0 — Walking Skeleton（✅ 完成）**：批次骨架，第三方歷史行情檔 → S3 raw landing → Bronze (Iceberg) → Silver → Gold → Athena 查得到
+- **Slice 1 — Data Quality + Contract（✅ 完成）**：疊加 WAP (Write-Audit-Publish) 品質關卡於批次路徑，Great Expectations Audit、Publish/擋下機制、`market-data.contract.yaml`（v1）
+- **Slice 2a — CDC 交易事件擷取（進行中）**：來源 OLTP DB → Kafka（Debezium + MSK Connect + Avro/Schema Registry），本專案第一條即時路徑的上半段
+  - ✅ §3 待確認事項全數拍板（RDS PostgreSQL、Debezium + MSK Connect、MSK Provisioned + 用完即拆、Avro + Glue Schema Registry）
+  - ✅ §4 項目 1：網路層 spike，確認 Control Tower SCP 未限制 VPC 相關資源
+  - ⏳ §4 項目 2 起：`vpc.tf` 正式化、來源 DB、MSK、CDC connector 部署與驗證
 
-詳細規格與驗收標準見 [docs/specs/slice0-batch-market-data.md](docs/specs/slice0-batch-market-data.md)；已拍板的架構決策見 [docs/architecture/adr/](docs/architecture/adr/)。
+詳細規格與驗收標準見對應 Slice 的 spec（[docs/specs/](docs/specs/)）；已拍板的架構決策見 [docs/architecture/adr/](docs/architecture/adr/)；跨 Slice 技術選型索引見 [docs/decision-log.md](docs/decision-log.md)。
 
 
 ## 文件導覽 (Documentation Map)
@@ -87,8 +93,12 @@
 | [execution-roadmap.md](execution-roadmap.md) | 執行路線，Slice 拆分與順序 |
 | [CLAUDE.md](CLAUDE.md) | AI Agent 開發守則（環境限制、專案規則、文件治理） |
 | [docs/specs/](docs/specs/) | 各 Slice 的元件規格（Spec-Driven Development 入口） |
+| [contracts/](contracts/) | 已生效的 Data Contract（YAML：schema、品質規則、違約行為） |
 | [docs/architecture/adr/](docs/architecture/adr/) | 架構決策紀錄 (ADR) |
+| [docs/decision-log.md](docs/decision-log.md) | 跨 Slice 技術選型索引，標註隸屬哪個 ADR |
 | [docs/arc42/](docs/arc42/) | arc42 架構文件，含決策摘要總表 |
 | [docs/data-dictionary/](docs/data-dictionary/) | 資料字典總覽，各資料領域現況 |
-| [docs/runbooks/](docs/runbooks/) | 維運手冊（AWS 存取、故障排除） |
+| [docs/runbooks/](docs/runbooks/) | 維運手冊（AWS 存取、故障排除、各 Slice 驗證紀錄） |
+| [infra/](infra/) | Terraform IaC，依 Slice 切分獨立 state（`environments/dev`、`environments/dev-slice2`） |
+| [src/](src/) | 原始碼：`ingestion/`（模擬資料 generator）、`quality/`（品質檢核規則）、`transform/`（Glue Job 轉換邏輯） |
 | [ai/contexts/](ai/contexts/) | Agent 執行規則、infra 現況快照、開發 session 紀錄 |
