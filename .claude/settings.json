@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/check-decision-log.sh",
+            "statusMessage": "檢查 spec 決策是否需要同步 Decision Log"
+          }
+        ]
+      }
+    ]
+  }
+}

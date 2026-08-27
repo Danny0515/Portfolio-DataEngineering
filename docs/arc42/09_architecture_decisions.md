@@ -20,3 +20,5 @@
 | [ADR-0003](../architecture/adr/0003-append-vs-overwrite.md) | 批次管線的寫入模式（Append vs 全量覆寫）與 Partition 設計 | ✅ `Accepted` |
 | [ADR-0004](../architecture/adr/0004-wap-quality-gate.md) | 為何用 WAP (Write-Audit-Publish) Pattern 而非事後檢核 | ✅ `Accepted` |
 | [ADR-0005](../architecture/adr/0005-project-admin-permission-exemption.md) | 專案總架構師帳號的 Lake Formation 權限不受本專案 Terraform 管理 | ✅ `Accepted` |
+| [ADR-0006](../architecture/adr/0006-msk-vs-kinesis.md) | 為何選 MSK 而非 Kinesis | ✅ `Accepted` |
+| [ADR-0007](../architecture/adr/0007-cdc-vs-batch-polling.md) | 為何用 CDC 而非定時撈整張表 | ✅ `Accepted` |

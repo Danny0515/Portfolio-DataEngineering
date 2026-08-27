@@ -397,3 +397,30 @@
 
 > 本次首次執行真實 `terraform apply`/`destroy`，觸發 Claude Code 的 Auto Mode 分類器封鎖（即使已透過 Plan Mode 核准仍會擋下，且分類器對「修改 settings.json 自行開權限」也一併封鎖）；改由使用者將該對話切到一般權限模式、在 `~/.claude/settings.json`（global，不在本 repo 版控範圍）新增 `Bash(terraform apply *)`/`Bash(terraform destroy *)` 規則後才放行。之後 Slice 2 若有更多需要真實 apply/destroy 的項目，可能會重複遇到同樣的分類器卡點。
 
+## Session 015 — 2026-08-21
+
+- **Engineer**: Danny
+- **Role**: Data Engineer
+- **LLM Used**: Claude Code (claude-sonnet-5)
+- **Module**: slice2a-cdc-ingestion
+
+### Completed
+
+- [x] 新增 [ADR-0006](../../docs/architecture/adr/0006-msk-vs-kinesis.md)（為何選 MSK 而非 Kinesis）與 [ADR-0007](../../docs/architecture/adr/0007-cdc-vs-batch-polling.md)（為何用 CDC 而非定時撈整張表），同步更新 `docs/arc42/09_architecture_decisions.md` 決策總表——完成 slice2a spec §9 規劃的兩份 ADR 產出
+- [x] 將 `slice2a-cdc-ingestion.md` §3.1～3.4 的四項技術選型寫入 `docs/decision-log.md`（§3.1→ADR-0007、§3.2→ADR-0006、§3.3/§3.4 標記「無對應 ADR」因屬成本/生命週期營運決策或既定藍圖落地細節）；anchor 連結用 GitHub slug 演算法模擬驗證，並拿 Slice1 既有連結回測比對吻合
+- [x] 建立自動化機制，避免 Decision Log 撰寫持續依賴人工事後提醒：新增 `.claude/hooks/check-decision-log.sh` + `.claude/settings.json` 的 `PostToolUse` hook（偵測 spec 新增「✅ **決定」標記時提醒同步 Decision Log，已用合成 payload 驗證 4 種情境並實際觸發一次 Edit 測試）；強化 `.claude/commands/add_adr.md` 新增「步驟五：詢問是否同步 Decision Log」
+- [x] 向使用者說明 Decision Log 的定位（execution-roadmap.md §3 完成 Gate 第四步、§4「進度由 ADR+Decision Log 累積體現」）與 `.claude/settings.json` 三層設定（user/project/local）的合併邏輯（allow/deny 跨層合併、deny 優先於 allow、窄規則無法收窄寬規則）
+
+### Related ADRs
+
+- 新增 [ADR-0006](../../docs/architecture/adr/0006-msk-vs-kinesis.md)：為何選 MSK 而非 Kinesis
+- 新增 [ADR-0007](../../docs/architecture/adr/0007-cdc-vs-batch-polling.md)：為何用 CDC 而非定時撈整張表
+
+### Next Steps
+
+- [ ] (延續 Session 014) 依 `docs/specs/slice2a-cdc-ingestion.md` §4 實作項目清單繼續：項目 2（`vpc.tf` 正式化，補 Security Group + Glue VPC Endpoint）或項目 3（交易資料模型與 generator）
+
+### Notes
+
+> Decision Log 寫入過程中發現一個流程缺口：即使 CLAUDE.md 已寫明「進度由 ADR/Decision Log 累積體現」，光靠文字指令並不會讓 agent 在對話中主動觸發撰寫（這次也是使用者事後提醒才補上），因此改用 PostToolUse hook + `add_adr` skill 收尾步驟做機制層級的攔截，而非僅仰賴標準指令。**§4 項目 13（文件產出）目前仍為 ⬜**：本次只補齊其中的 ADR/Decision Log 部分，§9 列的其他產出（Data Contract、資源啟停 runbook、端到端驗證 runbook，對應項目 10/11/12）都還沒開始，項目 13 要等這些全部完成才能打勾。
+
