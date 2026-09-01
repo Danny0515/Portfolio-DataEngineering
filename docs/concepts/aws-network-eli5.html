@@ -1,0 +1,539 @@
+<title>雲端私人社區</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --bg: #0E2A4A;
+    --bg-panel: #123356;
+    --bg-panel-2: #0F2E52;
+    --line: #E7F1FF;
+    --line-dim: #8FB0CE;
+    --rule: rgba(231, 241, 255, 0.16);
+    --accent: #FFB627;
+    --accent-ink: #2A1B00;
+    --accent-2: #5EEAD4;
+    --danger: #FF9B8F;
+    --danger-bg: rgba(255, 107, 90, 0.14);
+    --shadow: rgba(2, 10, 22, 0.45);
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #F3F6FA;
+      --bg-panel: #FFFFFF;
+      --bg-panel-2: #EAF1F8;
+      --line: #0E2A4A;
+      --line-dim: #5B7A9C;
+      --rule: rgba(14, 42, 74, 0.16);
+      --accent: #B8720A;
+      --accent-ink: #FFF6E6;
+      --accent-2: #0E8E82;
+      --danger: #C23B2F;
+      --danger-bg: rgba(194, 59, 47, 0.08);
+      --shadow: rgba(14, 42, 74, 0.12);
+    }
+  }
+
+  :root[data-theme="light"] {
+    --bg: #F3F6FA;
+    --bg-panel: #FFFFFF;
+    --bg-panel-2: #EAF1F8;
+    --line: #0E2A4A;
+    --line-dim: #5B7A9C;
+    --rule: rgba(14, 42, 74, 0.16);
+    --accent: #B8720A;
+    --accent-ink: #FFF6E6;
+    --accent-2: #0E8E82;
+    --danger: #C23B2F;
+    --danger-bg: rgba(194, 59, 47, 0.08);
+    --shadow: rgba(14, 42, 74, 0.12);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--line);
+    font-family: "Public Sans", -apple-system, "Noto Sans TC", "PingFang TC", sans-serif;
+    background-image:
+      linear-gradient(var(--rule) 1px, transparent 1px),
+      linear-gradient(90deg, var(--rule) 1px, transparent 1px);
+    background-size: 28px 28px;
+    line-height: 1.7;
+  }
+
+  .page {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 3.5rem;
+  }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.78rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent-2);
+    margin: 0 0 0.6rem;
+  }
+
+  h1, h2 {
+    font-family: "Big Shoulders Display", "Noto Sans TC", sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    text-wrap: balance;
+    letter-spacing: 0.01em;
+    margin: 0;
+    color: var(--line);
+  }
+
+  h1 { font-size: clamp(2.4rem, 7vw, 3.6rem); line-height: 0.98; }
+  h2 { font-size: clamp(1.5rem, 4.4vw, 2.05rem); line-height: 1.05; }
+
+  p { margin: 0; max-width: 62ch; }
+  .lede { font-size: 1.05rem; color: var(--line-dim); max-width: 52ch; }
+
+  .hero {
+    display: flex;
+    flex-direction: column;
+    gap: 1.4rem;
+  }
+
+  .hero-note {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.82rem;
+    color: var(--line-dim);
+    border-top: 1px solid var(--rule);
+    padding-top: 0.9rem;
+  }
+
+  .sheet {
+    position: relative;
+    background: var(--bg-panel);
+    border: 1px solid var(--rule);
+    padding: 2rem clamp(1.2rem, 4vw, 2.4rem) 2.2rem;
+    box-shadow: 0 18px 40px var(--shadow);
+    opacity: 0;
+    transform: translateY(18px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  .sheet.in-view { opacity: 1; transform: translateY(0); }
+  @media (prefers-reduced-motion: reduce) {
+    .sheet { opacity: 1; transform: none; transition: none; }
+  }
+
+  .sheet::before, .sheet::after,
+  .sheet .corner-br::before, .sheet .corner-br::after {
+    content: "";
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border-color: var(--line-dim);
+    opacity: 0.55;
+  }
+  .sheet::before { top: -1px; left: -1px; border-top: 2px solid; border-left: 2px solid; }
+  .sheet::after { top: -1px; right: -1px; border-top: 2px solid; border-right: 2px solid; }
+
+  .sheet-tag {
+    position: absolute;
+    top: -0.7rem;
+    left: clamp(1.2rem, 4vw, 2.4rem);
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    padding: 0.2rem 0.55rem;
+  }
+
+  .sheet-head {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    margin-bottom: 1.4rem;
+  }
+
+  .sheet-body { color: var(--line-dim); }
+  .sheet-body strong { color: var(--line); font-weight: 600; }
+
+  figure { margin: 1.4rem 0 0; }
+  .diagram-wrap {
+    overflow-x: auto;
+    background: var(--bg-panel-2);
+    border: 1px solid var(--rule);
+  }
+  svg.diagram { display: block; width: 100%; height: auto; }
+  figcaption {
+    margin-top: 0.6rem;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.78rem;
+    color: var(--line-dim);
+  }
+
+  .svg-label { font-family: "Public Sans", sans-serif; font-size: 12px; fill: currentColor; }
+  .svg-mono { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; fill: currentColor; }
+  .svg-title { font-family: "Big Shoulders Display", sans-serif; font-weight: 700; }
+
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.4rem;
+  }
+  @media (min-width: 620px) {
+    .compare { grid-template-columns: 1fr 1fr; }
+  }
+  .compare-col { display: flex; flex-direction: column; gap: 0.5rem; }
+  .compare-col h3 {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    margin: 0;
+    color: var(--line);
+  }
+
+  .oops-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    margin-top: 1.2rem;
+  }
+  @media (min-width: 620px) {
+    .oops-grid { grid-template-columns: 1fr 1fr; }
+  }
+  .oops-card {
+    background: var(--danger-bg);
+    border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+    padding: 1.1rem 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .oops-card .mark {
+    font-family: "IBM Plex Mono", monospace;
+    color: var(--danger);
+    font-size: 0.78rem;
+    letter-spacing: 0.06em;
+  }
+  .oops-card h4 { margin: 0; font-size: 1.02rem; color: var(--line); }
+  .oops-card p { color: var(--line-dim); font-size: 0.95rem; }
+
+  .status-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.9rem;
+    margin-top: 1.4rem;
+    align-items: center;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.82rem;
+    padding: 0.45rem 0.75rem;
+    border: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+  .chip.done { border-color: color-mix(in srgb, var(--accent-2) 55%, transparent); color: var(--accent-2); }
+  .chip.next { color: var(--line-dim); }
+  .status-arrow { color: var(--line-dim); font-family: "IBM Plex Mono", monospace; }
+
+  footer.colophon {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.78rem;
+    color: var(--line-dim);
+    border-top: 1px solid var(--rule);
+    padding-top: 1.2rem;
+  }
+</style>
+
+<div class="page">
+
+  <section class="hero">
+    <p class="eyebrow">AWS 網路架構 · 新手圖解</p>
+    <h1>打造一個<br>私人社區</h1>
+    <p class="lede">剛剛的 Terraform 到底蓋了什麼？沒碰過 AWS 網路也看得懂——用蓋一個社區的方式，帶你走一遍。</p>
+
+    <figure>
+      <div class="diagram-wrap">
+        <svg class="diagram" viewBox="0 0 640 260" role="img" aria-label="AWS 是一整座城市，VPC 是你在城市裡圍起來的一塊私人土地">
+          <defs>
+            <pattern id="citytex" width="26" height="26" patternUnits="userSpaceOnUse">
+              <circle cx="2" cy="2" r="1.4" fill="currentColor" opacity="0.35"/>
+            </pattern>
+          </defs>
+          <rect x="10" y="10" width="620" height="240" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 6" opacity="0.6"/>
+          <rect x="10" y="10" width="620" height="240" fill="url(#citytex)"/>
+          <text x="26" y="34" class="svg-mono">AWS 雲端帳號（一整座城市）</text>
+
+          <rect x="360" y="60" width="240" height="160" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.35"/>
+          <text x="378" y="82" class="svg-label" opacity="0.65">城裡其他建築</text>
+          <text x="378" y="98" class="svg-mono" opacity="0.55">Slice 0/1：Glue Job</text>
+          <text x="378" y="112" class="svg-mono" opacity="0.55">直接連公開 API</text>
+          <text x="378" y="126" class="svg-mono" opacity="0.55">不需要圍牆</text>
+
+          <rect x="46" y="60" width="270" height="160" fill="var(--bg)" stroke="var(--accent)" stroke-width="3"/>
+          <text x="66" y="98" class="svg-title" font-size="20" fill="var(--accent)">VPC</text>
+          <text x="66" y="120" class="svg-label">你的私人土地</text>
+          <text x="66" y="196" class="svg-mono" opacity="0.8">10.20.0.0/16</text>
+          <text x="66" y="210" class="svg-mono" opacity="0.6">vpc-0c80ecb9a8...</text>
+        </svg>
+      </div>
+      <figcaption>今天要蓋的，是圖左邊那塊有圍牆的地——Slice 0/1 用到的東西完全不需要圍牆，這是這個專案第一次需要自己的私人土地。</figcaption>
+    </figure>
+
+    <p class="hero-note">下面每一頁都是一張「施工藍圖」，對照的是 §4 項目 1、2 實際 apply 出來的 9 個資源。</p>
+  </section>
+
+  <section class="sheet">
+    <span class="sheet-tag">SHEET 01 · 買地</span>
+    <div class="sheet-head">
+      <h2>先圍一塊地</h2>
+      <p class="sheet-body">AWS 裡任何人都能租房子，但預設大家共用同一條公共馬路。<strong>VPC</strong> 就是你自己圍起來的一塊地——圍牆一拉，裡面住什麼、誰能進來，全部自己說了算。</p>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <span class="sheet-tag">SHEET 02 · 分地基</span>
+    <div class="sheet-head">
+      <h2>地要分兩塊，蓋在不同街區</h2>
+      <p class="sheet-body">整塊地只蓋一棟房子太冒險——那條街停電，整個社區就斷線。所以拆成兩塊地基，蓋在兩個不同<strong>街區（Availability Zone）</strong>。之後要搬進來的資料庫、Kafka，官方規定就是<strong>至少要 2 個街區</strong>才准進駐，不是我們自己加碼。</p>
+    </div>
+    <figure>
+      <div class="diagram-wrap">
+        <svg class="diagram" viewBox="0 0 640 220" role="img" aria-label="VPC 私人土地劃分成兩塊私有子網，分別位在 AZ a 與 AZ c 兩個不同可用區">
+          <rect x="20" y="20" width="600" height="180" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
+          <text x="36" y="44" class="svg-title" font-size="16" fill="var(--accent)">VPC · 10.20.0.0/16</text>
+
+          <rect x="46" y="66" width="240" height="112" fill="var(--bg-panel-2)" stroke="currentColor" stroke-width="1.5"/>
+          <text x="62" y="90" class="svg-label" font-weight="600">私有子網 A</text>
+          <text x="62" y="108" class="svg-mono" opacity="0.75">10.20.1.0/24</text>
+          <text x="62" y="124" class="svg-mono" opacity="0.6">街區 ap-northeast-1a</text>
+          <text x="62" y="160" class="svg-mono" opacity="0.55">subnet-0d2acd2f...</text>
+
+          <rect x="354" y="66" width="240" height="112" fill="var(--bg-panel-2)" stroke="currentColor" stroke-width="1.5"/>
+          <text x="370" y="90" class="svg-label" font-weight="600">私有子網 C</text>
+          <text x="370" y="108" class="svg-mono" opacity="0.75">10.20.2.0/24</text>
+          <text x="370" y="124" class="svg-mono" opacity="0.6">街區 ap-northeast-1c</text>
+          <text x="370" y="160" class="svg-mono" opacity="0.55">subnet-05eedd93...</text>
+
+          <line x1="286" y1="122" x2="354" y2="122" stroke="currentColor" stroke-width="1" stroke-dasharray="3 4" opacity="0.5"/>
+          <text x="292" y="140" class="svg-mono" opacity="0.5">一區斷線，另一區還在</text>
+        </svg>
+      </div>
+      <figcaption>沒有對外道路：兩塊地基裡的住戶連不到公共馬路，公共馬路上的人也進不來——這就是「私有」子網。</figcaption>
+    </figure>
+  </section>
+
+  <section class="sheet">
+    <span class="sheet-tag">SHEET 03 · 派警衛</span>
+    <div class="sheet-head">
+      <h2>大門先派一個警衛</h2>
+      <p class="sheet-body"><strong>Security Group</strong> 是社區大門口的警衛，決定誰能敲哪一戶的門。現在住戶都還沒搬進來，警衛手上目前只有一條規則；資料庫的門、Kafka 的門，等它們真的搬進來那天才會各自登記，不用現在就先猜。</p>
+    </div>
+    <figure>
+      <div class="diagram-wrap">
+        <svg class="diagram" viewBox="0 0 640 190" role="img" aria-label="Security Group 像社區警衛，目前只登記一條規則：成員之間可以用 443 互相打招呼">
+          <polygon points="60,50 100,50 100,90 80,105 60,90" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
+          <text x="46" y="128" class="svg-label" font-weight="600">警衛室</text>
+          <text x="30" y="144" class="svg-mono" opacity="0.7">slice2-internal</text>
+          <text x="30" y="158" class="svg-mono" opacity="0.55">sg-0a917aece7...</text>
+
+          <line x1="120" y1="70" x2="230" y2="70" stroke="currentColor" stroke-width="1.2" marker-end="url(#a3)"/>
+          <rect x="236" y="50" width="220" height="40" fill="var(--bg-panel-2)" stroke="var(--accent-2)" stroke-width="1.5"/>
+          <text x="250" y="66" class="svg-label" fill="var(--accent-2)">✓ 已登記</text>
+          <text x="250" y="82" class="svg-mono" opacity="0.75">鄰居之間 HTTPS(443) 可通行</text>
+
+          <line x1="120" y1="118" x2="230" y2="118" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 4" opacity="0.5"/>
+          <rect x="236" y="100" width="220" height="36" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="3 4" opacity="0.5"/>
+          <text x="250" y="122" class="svg-mono" opacity="0.55">資料庫的門（5432）— 項目 4 再登記</text>
+
+          <line x1="120" y1="160" x2="230" y2="160" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 4" opacity="0.5"/>
+          <rect x="236" y="142" width="220" height="36" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="3 4" opacity="0.5"/>
+          <text x="250" y="164" class="svg-mono" opacity="0.55">Kafka 的門 — 項目 5 再登記</text>
+
+          <defs>
+            <marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+        </svg>
+      </div>
+      <figcaption>虛線 = 還沒登記的規則，等資源真的搬進來才會補上，不先預測用不到的門。</figcaption>
+    </figure>
+  </section>
+
+  <section class="sheet">
+    <span class="sheet-tag">SHEET 04 · 挖通道</span>
+    <div class="sheet-head">
+      <h2>兩條不出大門的地下通道</h2>
+      <p class="sheet-body">住戶常要去「<strong>S3</strong> 圖書館」借資料、去「<strong>Glue</strong> 檔案局」查目錄。與其每次繞出大門走公共馬路，不如私接一條通道直達——這叫 <strong>VPC Endpoint</strong>，但兩種蓋法完全不同。</p>
+    </div>
+    <div class="compare">
+      <div class="compare-col">
+        <h3>Gateway 型 → S3</h3>
+        <div class="diagram-wrap">
+          <svg class="diagram" viewBox="0 0 300 190" role="img" aria-label="Gateway 型端點像貼一張路標，免費，直接寫進社區的路線規則裡">
+            <rect x="16" y="16" width="120" height="90" fill="var(--bg)" stroke="var(--accent)" stroke-width="2"/>
+            <text x="26" y="38" class="svg-label" fill="var(--accent)">VPC</text>
+            <line x1="136" y1="60" x2="220" y2="60" stroke="currentColor" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#a4)"/>
+            <text x="150" y="52" class="svg-mono" opacity="0.6">路標指過去</text>
+            <rect x="222" y="36" width="64" height="48" fill="var(--bg-panel-2)" stroke="var(--accent-2)" stroke-width="1.5"/>
+            <text x="234" y="65" class="svg-label" fill="var(--accent-2)">S3</text>
+            <text x="16" y="132" class="svg-mono" opacity="0.75">$0 · 只是一條路由規則</text>
+            <text x="16" y="150" class="svg-mono" opacity="0.6">不佔用子網 IP</text>
+            <text x="16" y="168" class="svg-mono" opacity="0.55">vpce-07cf547a...</text>
+            <defs>
+              <marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+              </marker>
+            </defs>
+          </svg>
+        </div>
+      </div>
+      <div class="compare-col">
+        <h3>Interface 型 → Glue</h3>
+        <div class="diagram-wrap">
+          <svg class="diagram" viewBox="0 0 300 190" role="img" aria-label="Interface 型端點像真的挖一條地下隧道，兩個子網各自要挖一條出入口，持續計費">
+            <rect x="16" y="16" width="120" height="90" fill="var(--bg)" stroke="var(--accent)" stroke-width="2"/>
+            <text x="26" y="38" class="svg-label" fill="var(--accent)">VPC</text>
+            <circle cx="55" cy="66" r="6" fill="var(--accent-2)"/>
+            <circle cx="95" cy="82" r="6" fill="var(--accent-2)"/>
+            <text x="30" y="100" class="svg-mono" opacity="0.6">兩個子網各挖一個出入口</text>
+            <line x1="61" y1="66" x2="220" y2="60" stroke="currentColor" stroke-width="1.6" marker-end="url(#a5)"/>
+            <rect x="222" y="36" width="64" height="48" fill="var(--bg-panel-2)" stroke="var(--accent-2)" stroke-width="1.5"/>
+            <text x="228" y="65" class="svg-label" fill="var(--accent-2)">Glue</text>
+            <text x="16" y="132" class="svg-mono" opacity="0.75">$ · 有自己的門牌（IP）</text>
+            <text x="16" y="150" class="svg-mono" opacity="0.6">持續按時計費</text>
+            <text x="16" y="168" class="svg-mono" opacity="0.55">vpce-0589038d...</text>
+            <defs>
+              <marker id="a5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+              </marker>
+            </defs>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <span class="sheet-tag">SHEET 05 · 完整藍圖</span>
+    <div class="sheet-head">
+      <h2>組起來，長這樣</h2>
+      <p class="sheet-body">這就是這次 Terraform apply 真正在雲端蓋出來的東西——不是示意圖，9 個資源全部實際存在。</p>
+    </div>
+    <figure>
+      <div class="diagram-wrap">
+        <svg class="diagram" viewBox="0 0 680 360" role="img" aria-label="完整架構：VPC 內有兩個私有子網與一個警衛 Security Group，透過兩種 VPC Endpoint 分別連到 S3 與 Glue，整個社區沒有連到公共網際網路">
+          <rect x="14" y="14" width="652" height="332" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 6" opacity="0.5"/>
+          <text x="30" y="36" class="svg-mono" opacity="0.65">AWS 雲端帳號</text>
+
+          <rect x="40" y="56" width="330" height="270" fill="var(--bg)" stroke="var(--accent)" stroke-width="2.5"/>
+          <text x="56" y="80" class="svg-title" font-size="16" fill="var(--accent)">VPC 10.20.0.0/16</text>
+
+          <rect x="58" y="98" width="140" height="90" fill="var(--bg-panel-2)" stroke="currentColor" stroke-width="1.3"/>
+          <text x="68" y="118" class="svg-label">子網 A</text>
+          <text x="68" y="134" class="svg-mono" opacity="0.6">10.20.1.0/24</text>
+          <circle cx="180" cy="170" r="5" fill="var(--accent-2)"/>
+
+          <rect x="212" y="98" width="140" height="90" fill="var(--bg-panel-2)" stroke="currentColor" stroke-width="1.3"/>
+          <text x="222" y="118" class="svg-label">子網 C</text>
+          <text x="222" y="134" class="svg-mono" opacity="0.6">10.20.2.0/24</text>
+          <circle cx="334" cy="170" r="5" fill="var(--accent-2)"/>
+
+          <polygon points="70,222 100,222 100,250 85,262 70,250" fill="none" stroke="currentColor" stroke-width="2"/>
+          <text x="108" y="242" class="svg-label">警衛（slice2-internal）</text>
+          <text x="108" y="258" class="svg-mono" opacity="0.55">目前只放行 443</text>
+
+          <text x="58" y="300" class="svg-mono" opacity="0.55">route table 共用一張，兩子網都通</text>
+
+          <line x1="370" y1="150" x2="470" y2="120" stroke="currentColor" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#a6)"/>
+          <text x="378" y="112" class="svg-mono" opacity="0.6">Gateway</text>
+          <rect x="476" y="96" width="70" height="48" fill="var(--bg-panel-2)" stroke="var(--accent-2)" stroke-width="1.5"/>
+          <text x="492" y="126" class="svg-label" fill="var(--accent-2)">S3</text>
+
+          <line x1="370" y1="200" x2="470" y2="220" stroke="currentColor" stroke-width="1.6" marker-end="url(#a6)"/>
+          <text x="378" y="238" class="svg-mono" opacity="0.6">Interface</text>
+          <rect x="476" y="196" width="70" height="48" fill="var(--bg-panel-2)" stroke="var(--accent-2)" stroke-width="1.5"/>
+          <text x="486" y="226" class="svg-label" fill="var(--accent-2)">Glue</text>
+
+          <text x="476" y="286" class="svg-mono" opacity="0.5">沒有 IGW／NAT</text>
+          <text x="476" y="300" class="svg-mono" opacity="0.5">= 出不了這座城市</text>
+
+          <defs>
+            <marker id="a6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+        </svg>
+      </div>
+      <figcaption>VPC・2 私有子網・1 張 route table・2 個 association・1 個警衛 SG・2 個 VPC Endpoint = 9 個資源。</figcaption>
+    </figure>
+  </section>
+
+  <section class="sheet">
+    <span class="sheet-tag">SHEET 06 · 施工意外</span>
+    <div class="sheet-head">
+      <h2>蓋的時候，撞到兩面牆</h2>
+      <p class="sheet-body">照著藍圖蓋，還是踢到兩個沒料到的規定。</p>
+    </div>
+    <div class="oops-grid">
+      <div class="oops-card">
+        <span class="mark">✗ 街區 B 不存在</span>
+        <h4>訂的地根本沒開發</h4>
+        <p>每個 AWS 帳號的街區代號（a／b／c…）對應到的實際地點是隨機分配的——這個帳號壓根沒有「b 街區」，系統直接退件，只好改訂「c 街區」。</p>
+      </div>
+      <div class="oops-card">
+        <span class="mark">✗ 中文名牌被退</span>
+        <h4>警衛只認英文</h4>
+        <p>Security Group 的名牌（description）只吃 ASCII 字元，中文說明會被系統直接拒絕——名牌只好先改用英文，其他施工筆記照樣留中文。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <span class="sheet-tag">SHEET 07 · 進度</span>
+    <div class="sheet-head">
+      <h2>現在蓋到哪了</h2>
+      <p class="sheet-body">地基完工，接下來是搬新住戶進來。</p>
+    </div>
+    <div class="status-row">
+      <span class="chip done">✓ 地基（VPC／子網／警衛／通道）</span>
+      <span class="status-arrow">→</span>
+      <span class="chip next">資料庫搬進來（RDS）</span>
+      <span class="status-arrow">→</span>
+      <span class="chip next">Kafka 郵局搬進來（MSK）</span>
+    </div>
+  </section>
+
+  <footer class="colophon">
+    對照 docs/specs/slice2a-cdc-ingestion.md §4 項目 1／2 · infra/environments/dev-slice2/vpc.tf
+  </footer>
+
+</div>
+
+<script>
+  (function () {
+    var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var sheets = document.querySelectorAll('.sheet');
+    if (reduceMotion || !('IntersectionObserver' in window)) {
+      sheets.forEach(function (s) { s.classList.add('in-view'); });
+      return;
+    }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('in-view');
+          io.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.15, rootMargin: '0px 0px -60px 0px' });
+    sheets.forEach(function (s) { io.observe(s); });
+  })();
+</script>

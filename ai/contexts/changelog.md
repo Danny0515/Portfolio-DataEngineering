@@ -424,3 +424,29 @@
 
 > Decision Log 寫入過程中發現一個流程缺口：即使 CLAUDE.md 已寫明「進度由 ADR/Decision Log 累積體現」，光靠文字指令並不會讓 agent 在對話中主動觸發撰寫（這次也是使用者事後提醒才補上），因此改用 PostToolUse hook + `add_adr` skill 收尾步驟做機制層級的攔截，而非僅仰賴標準指令。**§4 項目 13（文件產出）目前仍為 ⬜**：本次只補齊其中的 ADR/Decision Log 部分，§9 列的其他產出（Data Contract、資源啟停 runbook、端到端驗證 runbook，對應項目 10/11/12）都還沒開始，項目 13 要等這些全部完成才能打勾。
 
+## Session 016 — 2026-09-01
+
+- **Engineer**: Danny
+- **Role**: Data Engineer
+- **LLM Used**: Claude Code (claude-sonnet-5)
+- **Module**: slice2a-cdc-ingestion
+
+### Completed
+
+- [x] (承接 Session 015 Next Step)完成 §4 項目 2 網路層 Terraform 正式化：`infra/environments/dev-slice2/` 擴充為 2 個私有子網（AZ a/c，滿足 RDS DB Subnet Group 與 MSK broker 數須為 AZ 數倍數的硬性要求）、新增共用 Security Group `slice2-internal`（先只開 self-referencing 443）、新增 Glue Interface VPC Endpoint；apply 後**不 destroy**，留給後續項目（4/5/7）繼續蓋在同一組資源上
+- [x] 過程中實測到兩個規劃階段沒料到的 AWS API 限制並修正：此帳號在 `ap-northeast-1` 實際可用 AZ 為 a/c/d（訂的 b 不存在，改用 a/c）；Security Group 的 description（rule 層級與 group 層級皆是）只接受 ASCII，中文被 API 直接拒絕，改用英文描述
+- [x] 確認 Glue Interface VPC Endpoint（跟項目 1 已驗證的 S3 Gateway 型是不同機制）同樣未被 Control Tower SCP 擋下；用 `aws cloudtrail lookup-events` 向使用者示範如何在 VPC Console／CloudTrail Event history 找到這批資源與執行紀錄，包含兩次失敗呼叫（`errorCode: Client.InvalidParameterValue`）也完整留有記錄
+- [x] 新增 `docs/concepts/` 目錄，收錄零基礎技術概念解說／學習筆記（服務對象含未來接手者與開發者自己），將先前用 `/eli5` skill 產出的 AWS 網路架構圖解 HTML 搬入，並建立 `overview.md` 索引（比照 `docs/data-dictionary/overview.md` 既有慣例）；同步更新 README.md 文件導覽表格
+
+### Related ADRs
+
+- 無新增 ADR（本次為 §4 項目 2 的實作與驗證，非新的技術選型決策）
+
+### Next Steps
+
+- [ ] 依 `docs/specs/slice2a-cdc-ingestion.md` §4 實作項目清單繼續：項目 3（交易資料模型與 generator）或項目 4（來源 OLTP DB / RDS）
+
+### Notes
+
+> 網路層正式化踩到的兩個限制（AZ 代碼隨帳號隨機分配、Security Group description 僅限 ASCII）都是純 AWS API 層級的規則，規劃階段無法預先得知，只能靠實際 apply 才會撞見——這也印證了 §4 項目 1 先留一個 spike 步驟、項目 2 才正式化的分工是對的。**§4 項目 13（文件產出）仍為 ⬜**：延續前次註記，待 Data Contract／資源啟停 runbook／端到端驗證 runbook（項目 10/11/12）完成後才能打勾。
+
