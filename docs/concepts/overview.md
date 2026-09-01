@@ -11,3 +11,9 @@
 - **檔案**：[aws-network-eli5.html](aws-network-eli5.html)
 - **內容**：用「蓋一個私人社區」的比喻，圖解 Slice 2a §4 項目 1/2 實際建立的 VPC、私有子網、Security Group、VPC Endpoint（Gateway 型 vs Interface 型）如何組成一個私有網路，含實際 apply 過程遇到的兩個意外（可用區代碼不可用、Security Group description 只接受 ASCII）
 - **對應**：[docs/specs/slice2a-cdc-ingestion.md](../specs/slice2a-cdc-ingestion.md) §4 項目 1/2
+
+## Terraform：環境分帳號 vs 同環境拆 state
+
+- **檔案**：[terraform-account-vs-state-eli5.html](terraform-account-vs-state-eli5.html)
+- **內容**：用「城市與工地」的比喻，釐清兩條常被混在一起的分割線——軸線一「dev/uat/prod 要不要分 AWS account」跟軸線二「同一個環境內，state 要不要依生命週期拆成多組」，並說明為何 Terraform Workspace 不適合本專案的 `dev/` vs `dev-slice2/` 情境，兩者本質是可疊加、非互斥的決策
+- **對應**：`infra/environments/dev/`、`infra/environments/dev-slice2/`；[docs/specs/slice2a-cdc-ingestion.md](../specs/slice2a-cdc-ingestion.md) §3.3(b)

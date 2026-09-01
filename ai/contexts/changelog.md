@@ -450,3 +450,30 @@
 
 > 網路層正式化踩到的兩個限制（AZ 代碼隨帳號隨機分配、Security Group description 僅限 ASCII）都是純 AWS API 層級的規則，規劃階段無法預先得知，只能靠實際 apply 才會撞見——這也印證了 §4 項目 1 先留一個 spike 步驟、項目 2 才正式化的分工是對的。**§4 項目 13（文件產出）仍為 ⬜**：延續前次註記，待 Data Contract／資源啟停 runbook／端到端驗證 runbook（項目 10/11/12）完成後才能打勾。
 
+## Session 017 — 2026-09-01
+
+- **Engineer**: Danny
+- **Role**: Data Engineer
+- **LLM Used**: Claude Code (claude-sonnet-5)
+- **Module**: slice2a-cdc-ingestion
+
+### Completed
+
+- [x] 新增第二篇 `docs/concepts/` 條目 `terraform-account-vs-state-eli5.html`（「城市與工地」比喻），釐清「環境分帳號」與「同環境拆 state」兩條常被混在一起的分割線，並附上使用者原始文字說明的「總結」區塊；同步更新 `overview.md` 索引
+- [x] 新增 PostToolUse hook，避免 `infra_{state}.md` 快照持續依賴人工事後提醒：`.claude/hooks/check-infra-snapshot.sh` 偵測 Bash 工具執行「terraform apply」且成功時，從指令內容解析 `infra/environments/<name>` 對應到 `ai/contexts/infra_<name>.md`（連字號轉底線），提醒同步覆寫；`.claude/settings.json` 新增對應的 `Bash` matcher 設定
+- [x] 用合成 payload pipe-test 驗證 6 種情境（dev-slice2 apply、dev apply 用 `-chdir`、無路徑的 bare apply、apply 失敗、`terraform plan`、不相關指令），行為皆符合預期
+- [x] 向使用者說明兩個 Terraform 知識點：(a) `terraform apply` 可用 `-chdir` 或先 `cd` 指定工作目錄，`dev/`／`dev-slice2/` 分開是為了滿足 state 隔離的專案需求，非 Terraform 硬性規定；(b) 「環境分帳號」與「同環境內拆 state」是兩條可疊加、不互斥的分割線
+
+### Related ADRs
+
+- 無新增 ADR
+
+### Next Steps
+
+- [ ] (延續 Session 016) 依 `docs/specs/slice2a-cdc-ingestion.md` §4 實作項目清單繼續：項目 3（交易資料模型與 generator）或項目 4（來源 OLTP DB / RDS）
+- [ ] `check-infra-snapshot.sh` hook 端到端生效與否，留到下次實際 terraform apply 時順便確認，不另外安排 reload 驗證
+
+### Notes
+
+> `.claude/settings.json` 這次是編輯既有檔案（新增第二個 hook），不是首次建立——驗證端到端觸發時撞到設定重載限制（session 一開始就讀過的設定檔，後續編輯不會自動重新載入），跟第一個 hook（`check-decision-log.sh`）建立當下就順利驗證的情況不同。之後每次「編輯」既有 `settings.json` 新增 hook，都可能要提醒使用者手動重載才能驗證，這點值得記下來避免下次又忘記。
+

@@ -10,6 +10,16 @@
             "statusMessage": "檢查 spec 決策是否需要同步 Decision Log"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/check-infra-snapshot.sh",
+            "statusMessage": "檢查 terraform apply 是否需要同步 infra 快照"
+          }
+        ]
       }
     ]
   }
