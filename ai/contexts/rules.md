@@ -24,3 +24,9 @@
 - **規則**：Agent 設計/實作本專案架構下任何 IAM 權限相關的 Terraform 資源（IAM Role/Policy、Lake Formation 權限授予等，即 project-owned 資源與 service principal 的權限）時，一律優先遵照 AWS 官方文件建議的 best practice（例如最小權限原則、避免用萬用字元 `Resource="*"`、依服務官方文件建議的權限模型設計，包含該服務是否疊了額外的授權層，例如 Glue Data Catalog + Lake Formation）。若 AWS best practice 跟 [plan.md](../../plan.md) 的技術選型/範圍，或本專案當下的具體需求產生衝突，不能自行決定妥協方案，必須先跟使用者討論、取得特例的解決方案共識；不論最終採用 best practice 還是特例，都要用 `add_adr` skill 留下對應的 ADR 記錄決策理由。
 - **Why**：IAM policy 依最小權限原則設計好了，仍因沒查證這個帳號的 Glue Data Catalog 疊了一層 **Lake Formation** 授權，讓 Glue Job 跟 Athena 查詢各失敗一次，事後才補 grant。完整除錯過程見 [changelog.md](changelog.md) Session 003。
 - **How to apply**：Agent 規劃或撰寫任何 IAM Role/Policy、Lake Formation 權限、或其他權限相關 Terraform 資源前，先查證 AWS 官方文件針對該服務的權限 best practice（含是否需要額外授權層），並以此為預設實作依據；只有在 best practice 跟 plan.md 或使用者明確提出的專案需求衝突時，才停下來跟使用者討論特例，取得共識後用 `add_adr` skill 產出 ADR。
+
+## RULE-004：Changelog 僅記錄影響邏輯/架構/接手方式的異動，純數值調整記錄於 git commit 即可
+
+- **規則**：需要寫入 [changelog.md](changelog.md) 的異動限於：改到業務邏輯、架構決策，或會影響下一個人接手方式的異動（例如資料流變更、模組邊界調整、決策取捨、新增規則或 ADR 等）。純數值/清單擴充、格式調整這類不影響邏輯的異動，直接記錄在 git commit message 即可，不必額外寫入 changelog。
+- **Why**：避免 changelog 因為瑣碎異動而失焦，讓它保留給真正需要被下一個人看到、理解決策脈絡的內容；瑣碎異動本身已有 git commit 歷史可追溯，無需重複記錄。
+- **How to apply**：Agent 每次要呼叫 `update_change_log` skill 或考慮是否寫入 changelog 前，先判斷這次異動是否屬於「業務邏輯／架構決策／影響接手方式」三類之一；若只是數值調整、清單擴充、格式修正等不影響邏輯的異動，不寫入 changelog，只需確保 git commit message 清楚描述異動內容即可。

@@ -25,6 +25,7 @@
 - RULE-001：AWS 資源部署一律使用 Terraform，禁止用 AWS CLI 部署（AWS CLI 僅限驗證/排錯，且限 bastion 上執行）
 - RULE-002：AWS CLI 操作一律優先嘗試 MFA 長期憑證（`dt-lab-long-term`），SSH Bastion 降級為連線失敗時的備援手段
 - RULE-003：IAM 權限設定一律遵照 AWS 官方 best practice，與 `plan.md` 專案需求衝突時才跟使用者討論特例並留下 ADR
+- RULE-004：Changelog 僅記錄業務邏輯、架構決策或影響接手方式的異動，純數值/清單擴充、格式調整等不影響邏輯的異動記錄於 git commit 即可
 
 ## 程式碼風格 (Coding Style)
 
