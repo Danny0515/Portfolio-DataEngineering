@@ -3,7 +3,7 @@
 ## 專案簡介 (Project Introduction)
 
 **FinLakehouse** 是一個以 AWS 為核心、涵蓋完整資料工程生命週期的金融資料分析平台。模擬金融科技公司的資料平台情境，整合三類金融資料：Market Data、Transaction Data、User Behavior，同時涵蓋 **Batch (批次)** 與 **Streaming (串流)** 兩條資料路徑，並以 **Lakehouse (資料湖倉)** 架構為基礎。  
-核心賣點不是單純 ETL，而是涵蓋 Ingestion → Transformation → Serving 的完整生態系，含 Data Quality、Metadata Management、DataOps。完整的架構願景、技術選型與分階段交付規劃見 [plan.md](plan.md)，執行順序見 [execution-roadmap.md](execution-roadmap.md)。
+不是單純 ETL，而是涵蓋 Ingestion → Transformation → Serving 的完整生態系，含 Data Quality、Metadata Management、DataOps。完整的架構願景、技術選型與分階段交付規劃見 [plan.md](plan.md)，執行順序見 [execution-roadmap.md](execution-roadmap.md)。
 
 ### 專案目標 (Project Goals)
 - **完全透過 [Claude Code](https://claude.com/claude-code) 開發**：從架構規劃、Spec 撰寫、Terraform 基礎設施、PySpark 轉換邏輯、IAM/Lake Formation 權限設計到 ADR／文件產出，皆由使用者與 Claude Code 協作完成。  

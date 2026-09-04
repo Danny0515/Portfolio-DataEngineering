@@ -18,6 +18,9 @@
 - [把 Pattern 封裝成 Skill](#把-pattern-封裝成-skill)
 - [arc42 08_concepts.md 內容通用化](#arc42-08_conceptsmd-內容通用化)
 - [Lake Formation／IAM 權限 drift 偵測自動化](#lake-formationiam-權限-drift-偵測自動化)
+- [Python 套件跨執行環境部署的選型原則](#python-套件跨執行環境部署的選型原則)
+- [generate_trade_data.py 改為交錯執行多筆交易生命週期](#generate_trade_datapy-改為交錯執行多筆交易生命週期)
+- [新增整合測試](#新增整合測試)
 
 ---
 
@@ -78,3 +81,33 @@
 
 ### 執行內容
 待 Slice4 規劃 CI/CD 與可觀測性時一併評估：(1) 是否排程化 `terraform plan` drift 偵測、(2) 是否啟用 AWS IAM Access Analyzer 的 unused/external access findings、(3) 是否仍需要一個查詢型 skill（如 `query_lakeformation_permissions`）作為輔助工具，三者一起決定，不個別零散導入。
+
+---
+
+## Python 套件跨執行環境部署的選型原則
+
+### 背景與原因
+Slice 2a 交易 generator 原規劃用 `psycopg[binary]` 連 RDS，改部署成 Lambda（VPC 內存取私有 RDS）後，發現本機 macOS 開發環境跟 Lambda 的 Amazon Linux runtime 之間，帶 C extension 的套件需處理跨平台編譯／manylinux wheel 相容性問題，改用純 Python 的 `pg8000` 繞開。這類「開發機跟部署環境不同 runtime」的情境未來可能再遇到，但目前只有這一個案例，該提煉成 `ai/contexts/rules.md` 通用規則、還是留在程式碼註解就好，需要更多案例才能判斷，先不急著定案。
+
+### 執行內容
+待專案出現第二個「部署到跟開發機不同執行環境」的案例時，一併評估是否該提煉成 `ai/contexts/rules.md` 的通用規則；決定後視需要用 `add_project_rule` skill 寫入。
+
+---
+
+## generate_trade_data.py 改為交錯執行多筆交易生命週期
+
+### 背景與原因
+`src/ingestion/generate_trade_data.py` 的 `generate()` 目前逐筆交易處理：每筆交易完整的生命週期（INSERT → 之後所有 UPDATE/DELETE）依序執行完才開始下一筆，多筆交易之間完全不交錯。真實市場是很多筆交易同時處於不同階段（A 剛下單、B 已成交、C 剛被取消同時發生），目前寫法對「驗證 CDC 抓不抓得到 insert/update/delete」這個核心目的沒有影響，但若之後想用 `--delay-seconds` 做即時展示（邊跑邊看 Kafka 事件流入），畫面會不夠像真實盤面。
+
+### 執行內容
+待需要更真實的即時展示效果時，把 `generate()` 的迴圈邏輯改成維護一個「進行中交易」池，每一步隨機挑一筆既有交易往下推進一個狀態（或開一筆新交易），讓多筆交易的操作在時間軸上交錯出現；`generate_trade_lifecycle()` 的純邏輯與 pytest 覆蓋不受影響，只改 `generate()` 呼叫順序。
+
+---
+
+## 新增整合測試
+
+### 背景與原因
+目前專案的測試（`tests/quality/`、`tests/ingestion/`）都只是「鏡射 `src/` 目錄結構」的單元/純邏輯測試，沒有真正碰外部系統（資料庫、AWS 等）的整合測試分類與對應慣例。已知的具體缺口之一：`src/ingestion/generate_trade_data.py` 裡真的會寫入資料庫的函式（`execute_operation`／`run_ddl`／`fetch_rows`）目前完全沒有自動化測試覆蓋，只靠手動 `aws lambda invoke` 驗證過一次，不是可重複執行的回歸測試。
+
+### 執行內容
+待評估是否要在這個專案引入「整合測試」這個分類與對應慣例（例如用本機 Docker Postgres 起一個真的資料庫來測 `execute_operation` 等函式），決定後可能需要一併定義 `pytest.ini` 的新 marker 或獨立目錄慣例。`generate_trade_data.py` 的 DB 寫入邏輯補測試只是目前唯一已知的具體案例，之後若有更多類似需求（例如碰 S3/Kafka 的邏輯）一併納入這個分類評估，不要為了單一案例就零散決定慣例。

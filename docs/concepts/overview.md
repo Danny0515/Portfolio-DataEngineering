@@ -17,3 +17,9 @@
 - **檔案**：[terraform-account-vs-state-eli5.html](terraform-account-vs-state-eli5.html)
 - **內容**：用「城市與工地」的比喻，釐清兩條常被混在一起的分割線——軸線一「dev/uat/prod 要不要分 AWS account」跟軸線二「同一個環境內，state 要不要依生命週期拆成多組」，並說明為何 Terraform Workspace 不適合本專案的 `dev/` vs `dev-slice2/` 情境，兩者本質是可疊加、非互斥的決策
 - **對應**：`infra/environments/dev/`、`infra/environments/dev-slice2/`；[docs/specs/slice2a-cdc-ingestion.md](../specs/slice2a-cdc-ingestion.md) §3.3(b)
+
+## RDS 與 Lambda（檔案室與派遣工）
+
+- **檔案**：[rds-lambda-eli5.html](rds-lambda-eli5.html)
+- **內容**：用「檔案室搬進來、派遣工用傳送門進出」的比喻，圖解 Slice 2a §4 項目 3/4 新增的 RDS（來源 OLTP DB）、Lambda（generator，VPC 內執行）、IAM Role、Security Group 新規則與 CloudWatch Logs VPC Endpoint；重點說明 Lambda 為何不需要 bastion／VPN 就能存取私有子網內的 RDS，附實際執行結果
+- **對應**：[docs/specs/slice2a-cdc-ingestion.md](../specs/slice2a-cdc-ingestion.md) §4 項目 3/4

@@ -1,0 +1,501 @@
+<title>檔案室與派遣工</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --bg: #0E2A4A;
+    --bg-panel: #123356;
+    --bg-panel-2: #0F2E52;
+    --line: #E7F1FF;
+    --line-dim: #8FB0CE;
+    --rule: rgba(231, 241, 255, 0.16);
+    --accent: #FFB627;
+    --accent-ink: #2A1B00;
+    --accent-2: #5EEAD4;
+    --danger: #FF9B8F;
+    --danger-bg: rgba(255, 107, 90, 0.14);
+    --shadow: rgba(2, 10, 22, 0.45);
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #F3F6FA;
+      --bg-panel: #FFFFFF;
+      --bg-panel-2: #EAF1F8;
+      --line: #0E2A4A;
+      --line-dim: #5B7A9C;
+      --rule: rgba(14, 42, 74, 0.16);
+      --accent: #B8720A;
+      --accent-ink: #FFF6E6;
+      --accent-2: #0E8E82;
+      --danger: #C23B2F;
+      --danger-bg: rgba(194, 59, 47, 0.08);
+      --shadow: rgba(14, 42, 74, 0.12);
+    }
+  }
+
+  :root[data-theme="light"] {
+    --bg: #F3F6FA;
+    --bg-panel: #FFFFFF;
+    --bg-panel-2: #EAF1F8;
+    --line: #0E2A4A;
+    --line-dim: #5B7A9C;
+    --rule: rgba(14, 42, 74, 0.16);
+    --accent: #B8720A;
+    --accent-ink: #FFF6E6;
+    --accent-2: #0E8E82;
+    --danger: #C23B2F;
+    --danger-bg: rgba(194, 59, 47, 0.08);
+    --shadow: rgba(14, 42, 74, 0.12);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--line);
+    font-family: "Public Sans", -apple-system, "Noto Sans TC", "PingFang TC", sans-serif;
+    background-image:
+      linear-gradient(var(--rule) 1px, transparent 1px),
+      linear-gradient(90deg, var(--rule) 1px, transparent 1px);
+    background-size: 28px 28px;
+    line-height: 1.7;
+  }
+
+  .page {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 3.5rem;
+  }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.78rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent-2);
+    margin: 0 0 0.6rem;
+  }
+
+  h1, h2 {
+    font-family: "Big Shoulders Display", "Noto Sans TC", sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    text-wrap: balance;
+    letter-spacing: 0.01em;
+    margin: 0;
+    color: var(--line);
+  }
+
+  h1 { font-size: clamp(2.4rem, 7vw, 3.6rem); line-height: 0.98; }
+  h2 { font-size: clamp(1.5rem, 4.4vw, 2.05rem); line-height: 1.05; }
+
+  p { margin: 0; max-width: 62ch; }
+  .lede { font-size: 1.05rem; color: var(--line-dim); max-width: 52ch; }
+
+  .hero {
+    display: flex;
+    flex-direction: column;
+    gap: 1.4rem;
+  }
+
+  .hero-note {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.82rem;
+    color: var(--line-dim);
+    border-top: 1px solid var(--rule);
+    padding-top: 0.9rem;
+  }
+
+  .sheet {
+    position: relative;
+    background: var(--bg-panel);
+    border: 1px solid var(--rule);
+    padding: 2rem clamp(1.2rem, 4vw, 2.4rem) 2.2rem;
+    box-shadow: 0 18px 40px var(--shadow);
+    opacity: 0;
+    transform: translateY(18px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  .sheet.in-view { opacity: 1; transform: translateY(0); }
+  @media (prefers-reduced-motion: reduce) {
+    .sheet { opacity: 1; transform: none; transition: none; }
+  }
+
+  .sheet::before, .sheet::after {
+    content: "";
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border-color: var(--line-dim);
+    opacity: 0.55;
+  }
+  .sheet::before { top: -1px; left: -1px; border-top: 2px solid; border-left: 2px solid; }
+  .sheet::after { top: -1px; right: -1px; border-top: 2px solid; border-right: 2px solid; }
+
+  .sheet-tag {
+    position: absolute;
+    top: -0.7rem;
+    left: clamp(1.2rem, 4vw, 2.4rem);
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    padding: 0.2rem 0.55rem;
+  }
+
+  .sheet-head {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    margin-bottom: 1.4rem;
+  }
+
+  .sheet-body { color: var(--line-dim); }
+  .sheet-body strong { color: var(--line); font-weight: 600; }
+
+  figure { margin: 1.4rem 0 0; }
+  .diagram-wrap {
+    overflow-x: auto;
+    background: var(--bg-panel-2);
+    border: 1px solid var(--rule);
+  }
+  svg.diagram { display: block; width: 100%; height: auto; }
+  figcaption {
+    margin-top: 0.6rem;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.78rem;
+    color: var(--line-dim);
+  }
+
+  .svg-label { font-family: "Public Sans", sans-serif; font-size: 12px; fill: currentColor; }
+  .svg-mono { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; fill: currentColor; }
+  .svg-title { font-family: "Big Shoulders Display", sans-serif; font-weight: 700; }
+
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.2rem;
+  }
+  @media (min-width: 640px) {
+    .compare { grid-template-columns: 1fr 1fr; }
+  }
+  .compare-col h3 {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    margin: 0 0 0.5rem;
+    color: var(--line);
+  }
+
+  .badge-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    margin-top: 1.2rem;
+  }
+  .badge-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.7rem;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.85rem;
+    padding: 0.55rem 0.8rem;
+    background: var(--bg-panel-2);
+    border: 1px solid var(--rule);
+  }
+  .badge-row .tag { color: var(--accent-2); flex-shrink: 0; }
+  .badge-row .desc { color: var(--line-dim); font-family: "Public Sans", sans-serif; }
+
+  .status-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.9rem;
+    margin-top: 1.4rem;
+    align-items: center;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.82rem;
+    padding: 0.45rem 0.75rem;
+    border: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+  .chip.done { border-color: color-mix(in srgb, var(--accent-2) 55%, transparent); color: var(--accent-2); }
+  .chip.next { color: var(--line-dim); }
+  .status-arrow { color: var(--line-dim); font-family: "IBM Plex Mono", monospace; }
+
+  .result-strip {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin-top: 1.4rem;
+  }
+  @media (min-width: 560px) {
+    .result-strip { grid-template-columns: repeat(4, 1fr); }
+  }
+  .result-cell {
+    background: var(--bg-panel-2);
+    padding: 0.9rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+  .result-cell .num {
+    font-family: "Big Shoulders Display", sans-serif;
+    font-weight: 800;
+    font-size: 1.8rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--accent);
+  }
+  .result-cell .label {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.72rem;
+    color: var(--line-dim);
+    letter-spacing: 0.03em;
+  }
+
+  footer.colophon {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.78rem;
+    color: var(--line-dim);
+    border-top: 1px solid var(--rule);
+    padding-top: 1.2rem;
+  }
+</style>
+
+<div class="page">
+
+  <section class="hero">
+    <p class="eyebrow">AWS 服務 · 新手圖解</p>
+    <h1>檔案室與<br>派遣工</h1>
+    <p class="lede">上次蓋好了地跟圍牆，這次搬進兩個新居民——一棟檔案室、一位不用鑰匙就能進出的派遣工。</p>
+
+    <figure>
+      <div class="diagram-wrap">
+        <svg class="diagram" viewBox="0 0 640 200" role="img" aria-label="上次蓋好的是空的私人土地，這次搬進兩個新居民：檔案室與派遣工">
+          <rect x="20" y="20" width="280" height="160" fill="none" stroke="currentColor" stroke-width="1.6" opacity="0.4"/>
+          <text x="34" y="44" class="svg-label" opacity="0.6">之前：空地</text>
+          <rect x="46" y="66" width="100" height="90" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 5" opacity="0.35"/>
+          <rect x="166" y="66" width="100" height="90" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 5" opacity="0.35"/>
+          <text x="60" y="115" class="svg-mono" opacity="0.4">子網 A</text>
+          <text x="180" y="115" class="svg-mono" opacity="0.4">子網 C</text>
+
+          <line x1="300" y1="100" x2="340" y2="100" stroke="currentColor" stroke-width="1.4" marker-end="url(#h1)"/>
+
+          <rect x="346" y="20" width="280" height="160" fill="var(--bg)" stroke="var(--accent)" stroke-width="2.5"/>
+          <text x="360" y="44" class="svg-label" fill="var(--accent)">現在：兩個新居民</text>
+          <rect x="372" y="66" width="100" height="90" fill="var(--bg-panel-2)" stroke="var(--accent-2)" stroke-width="1.5"/>
+          <text x="384" y="98" class="svg-label" fill="var(--accent-2)">檔案室</text>
+          <text x="384" y="114" class="svg-mono" opacity="0.6">RDS</text>
+          <rect x="492" y="66" width="100" height="90" fill="var(--bg-panel-2)" stroke="var(--accent-2)" stroke-width="1.5" stroke-dasharray="4 3"/>
+          <text x="500" y="98" class="svg-label" fill="var(--accent-2)">派遣工</text>
+          <text x="500" y="114" class="svg-mono" opacity="0.6">Lambda</text>
+
+          <defs>
+            <marker id="h1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+        </svg>
+      </div>
+      <figcaption>對照的是 §4 項目 3／4 實際 apply 出來的 9 個新資源。</figcaption>
+    </figure>
+  </section>
+
+  <section class="sheet">
+    <span class="sheet-tag">SHEET 01 · 檔案室</span>
+    <div class="sheet-head">
+      <h2>先搬進一棟檔案室</h2>
+      <p class="sheet-body"><strong>RDS</strong> 就是專門存放交易紀錄的檔案室，蓋在子網 A 裡。它有一條特殊規定：每一頁紀錄的異動（新增、修改），都要留一份「複寫存根」——這是給之後要蓋的郵差（Debezium／CDC）抄錄用的，郵差還沒搬進來，但存根規則現在就先立好。</p>
+    </div>
+    <figure>
+      <div class="diagram-wrap">
+        <svg class="diagram" viewBox="0 0 640 200" role="img" aria-label="RDS 檔案室蓋在子網 A，掛著一份特殊規定：每次異動都留一份複寫存根">
+          <rect x="20" y="20" width="600" height="160" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 6" opacity="0.4"/>
+          <text x="36" y="42" class="svg-mono" opacity="0.6">VPC · 子網 A</text>
+
+          <rect x="60" y="60" width="220" height="100" fill="var(--bg-panel-2)" stroke="var(--accent-2)" stroke-width="2.5"/>
+          <text x="76" y="86" class="svg-title" font-size="16" fill="var(--accent-2)">檔案室</text>
+          <text x="76" y="106" class="svg-mono" opacity="0.7">slice2-trade</text>
+          <text x="76" y="122" class="svg-mono" opacity="0.6">db.t4g.micro · postgres 16</text>
+          <text x="76" y="140" class="svg-mono" opacity="0.5">私有，無公開 IP</text>
+
+          <rect x="330" y="60" width="270" height="100" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="4 3"/>
+          <text x="346" y="82" class="svg-label" fill="var(--accent)">特殊規定（parameter group）</text>
+          <text x="346" y="102" class="svg-mono" opacity="0.75">rds.logical_replication = 1</text>
+          <text x="346" y="122" class="svg-mono" opacity="0.55">每次異動留一份複寫存根</text>
+          <text x="346" y="138" class="svg-mono" opacity="0.5">給之後的郵差（CDC）抄錄用</text>
+        </svg>
+      </div>
+      <figcaption>slice2-trade.cbluumyfbmux.ap-northeast-1.rds.amazonaws.com（只在圍牆內能連到，外面連不進去）。</figcaption>
+    </figure>
+  </section>
+
+  <section class="sheet">
+    <span class="sheet-tag">SHEET 02 · 傳送門</span>
+    <div class="sheet-head">
+      <h2>派遣工不用走大門</h2>
+      <p class="sheet-body">社區沒有對外道路，一般人要進去得先挖隧道（bastion／VPN）。<strong>Lambda</strong> 不一樣：你在外面按一個門鈴（<code>aws lambda invoke</code>），AWS 就把派遣工「空降」進社區裡把事情辦完，辦完就消失——沒有人真的走過大門，門鈴走的是 AWS 自己的公開通道，跟社區內部網路完全是兩回事。</p>
+    </div>
+    <div class="compare">
+      <div class="compare-col">
+        <h3>一般做法（沒做）</h3>
+        <div class="diagram-wrap">
+          <svg class="diagram" viewBox="0 0 300 170" role="img" aria-label="一般做法需要挖一條隧道，本機才連得進私人社區">
+            <rect x="150" y="20" width="130" height="130" fill="var(--bg)" stroke="currentColor" stroke-width="2" opacity="0.5"/>
+            <text x="162" y="42" class="svg-label" opacity="0.6">社區</text>
+            <circle cx="40" cy="85" r="16" fill="none" stroke="currentColor" stroke-width="1.6" opacity="0.6"/>
+            <text x="20" y="120" class="svg-mono" opacity="0.55">本機</text>
+            <line x1="56" y1="85" x2="150" y2="85" stroke="currentColor" stroke-width="1.4" stroke-dasharray="4 4" opacity="0.5"/>
+            <text x="66" y="76" class="svg-mono" opacity="0.5">需要挖隧道</text>
+            <text x="66" y="105" class="svg-mono" opacity="0.4">bastion／VPN／SSM</text>
+          </svg>
+        </div>
+      </div>
+      <div class="compare-col">
+        <h3>Lambda 的做法（採用）</h3>
+        <div class="diagram-wrap">
+          <svg class="diagram" viewBox="0 0 300 170" role="img" aria-label="Lambda 的做法是本機按門鈴，AWS 把派遣工空降進社區辦事，不需要隧道">
+            <rect x="150" y="20" width="130" height="130" fill="var(--bg)" stroke="var(--accent)" stroke-width="2"/>
+            <text x="162" y="42" class="svg-label" fill="var(--accent)">社區</text>
+            <rect x="180" y="70" width="70" height="40" fill="var(--bg-panel-2)" stroke="var(--accent-2)" stroke-width="1.5" stroke-dasharray="3 3"/>
+            <text x="188" y="94" class="svg-mono" fill="var(--accent-2)">派遣工</text>
+            <circle cx="40" cy="85" r="16" fill="none" stroke="currentColor" stroke-width="1.6" opacity="0.7"/>
+            <text x="20" y="120" class="svg-mono" opacity="0.6">本機</text>
+            <line x1="56" y1="85" x2="150" y2="85" stroke="var(--accent-2)" stroke-width="1.6" marker-end="url(#h2)"/>
+            <text x="60" y="76" class="svg-mono" fill="var(--accent-2)">按門鈴（公開 API）</text>
+            <defs>
+              <marker id="h2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="var(--accent-2)"/>
+              </marker>
+            </defs>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <span class="sheet-tag">SHEET 03 · 工作證</span>
+    <div class="sheet-head">
+      <h2>派遣工的工作證與新規則</h2>
+      <p class="sheet-body">派遣工要辦事，得帶兩樣東西：一張<strong>工作證</strong>（IAM Role），跟檔案室大門新登記的一條<strong>通行規則</strong>——允許帶著這張證的人敲 5432 號門。</p>
+    </div>
+    <div class="badge-list">
+      <div class="badge-row">
+        <span class="tag">工作證</span>
+        <span class="desc">slice2-trade-generator-lambda（受管政策 AWSLambdaVPCAccessExecutionRole）</span>
+      </div>
+      <div class="badge-row">
+        <span class="tag">證上寫著 ①</span>
+        <span class="desc">可以在社區內部走動（管理網路介面）</span>
+      </div>
+      <div class="badge-row">
+        <span class="tag">證上寫著 ②</span>
+        <span class="desc">可以把工作報告寫到布告欄（CloudWatch Logs）</span>
+      </div>
+      <div class="badge-row">
+        <span class="tag">新規則</span>
+        <span class="desc">slice2-internal 的大門新增一條：允許帶證的人敲 5432 號門（Postgres）</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <span class="sheet-tag">SHEET 04 · 第三條通道</span>
+    <div class="sheet-head">
+      <h2>報告要送出去，得再挖一條通道</h2>
+      <p class="sheet-body">派遣工辦完事要寫報告，但社區沒有對外道路——報告一樣送不出去，除非再接一條私人通道，直通「布告欄總部」（CloudWatch Logs）。之前已經有兩條通道（S3 圖書館、Glue 檔案局），這次是第三條。</p>
+    </div>
+    <figure>
+      <div class="diagram-wrap">
+        <svg class="diagram" viewBox="0 0 640 200" role="img" aria-label="社區現在有三條地下通道，分別通往 S3、Glue、CloudWatch Logs 三個外部單位">
+          <rect x="20" y="20" width="180" height="160" fill="var(--bg)" stroke="var(--accent)" stroke-width="2"/>
+          <text x="34" y="44" class="svg-label" fill="var(--accent)">社區</text>
+
+          <line x1="200" y1="52" x2="280" y2="52" stroke="currentColor" stroke-width="1.3" stroke-dasharray="4 3" opacity="0.55"/>
+          <rect x="286" y="34" width="90" height="36" fill="var(--bg-panel-2)" stroke="var(--accent-2)" stroke-width="1.4"/>
+          <text x="300" y="57" class="svg-mono" fill="var(--accent-2)">S3</text>
+
+          <line x1="200" y1="100" x2="280" y2="100" stroke="currentColor" stroke-width="1.5" opacity="0.75"/>
+          <rect x="286" y="82" width="90" height="36" fill="var(--bg-panel-2)" stroke="var(--accent-2)" stroke-width="1.4"/>
+          <text x="300" y="105" class="svg-mono" fill="var(--accent-2)">Glue</text>
+
+          <line x1="200" y1="148" x2="280" y2="148" stroke="var(--accent-2)" stroke-width="1.8"/>
+          <rect x="286" y="130" width="140" height="36" fill="var(--bg-panel-2)" stroke="var(--accent-2)" stroke-width="1.8"/>
+          <text x="300" y="153" class="svg-mono" fill="var(--accent-2)">CloudWatch Logs（新）</text>
+
+          <text x="450" y="105" class="svg-mono" opacity="0.5">三條通道都是</text>
+          <text x="450" y="121" class="svg-mono" opacity="0.5">Interface Endpoint</text>
+          <text x="450" y="137" class="svg-mono" opacity="0.4">（除了 S3 是 Gateway 型）</text>
+        </svg>
+      </div>
+      <figcaption>vpce-0dd3f46341cdabbd7（logs），沒有這條通道，派遣工的執行紀錄會完全看不到。</figcaption>
+    </figure>
+  </section>
+
+  <section class="sheet">
+    <span class="sheet-tag">SHEET 05 · 實測</span>
+    <div class="sheet-head">
+      <h2>按下門鈴，真的辦成了</h2>
+      <p class="sheet-body">用 <code>aws lambda invoke</code> 觸發派遣工進去建表、產生 20 筆交易——這是真實跑出來的結果，不是預期值。</p>
+    </div>
+    <div class="result-strip">
+      <div class="result-cell"><span class="num">20</span><span class="label">INSERT</span></div>
+      <div class="result-cell"><span class="num">33</span><span class="label">UPDATE</span></div>
+      <div class="result-cell"><span class="num">4</span><span class="label">DELETE</span></div>
+      <div class="result-cell"><span class="num">16</span><span class="label">最終 FILLED</span></div>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <span class="sheet-tag">現況</span>
+    <div class="sheet-head">
+      <h2>現在蓋到哪了</h2>
+    </div>
+    <div class="status-row">
+      <span class="chip done">✓ 地基（VPC／子網／警衛／通道）</span>
+      <span class="status-arrow">→</span>
+      <span class="chip done">✓ 檔案室＋派遣工（RDS／Lambda）</span>
+      <span class="status-arrow">→</span>
+      <span class="chip next">郵差搬進來（MSK＋Debezium）</span>
+    </div>
+  </section>
+
+  <footer class="colophon">
+    對照 docs/specs/slice2a-cdc-ingestion.md §4 項目 3／4 · infra/environments/dev-slice2/{rds,lambda}.tf · 同系列：aws-network-eli5.html、terraform-account-vs-state-eli5.html
+  </footer>
+
+</div>
+
+<script>
+  (function () {
+    var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var sheets = document.querySelectorAll('.sheet');
+    if (reduceMotion || !('IntersectionObserver' in window)) {
+      sheets.forEach(function (s) { s.classList.add('in-view'); });
+      return;
+    }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('in-view');
+          io.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.15, rootMargin: '0px 0px -60px 0px' });
+    sheets.forEach(function (s) { io.observe(s); });
+  })();
+</script>

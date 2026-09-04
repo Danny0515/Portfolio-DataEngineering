@@ -129,8 +129,8 @@
 | --- | --- | --- | --- | --- |
 | 1 | 網路層 spike | 先建一個最小 VPC + 私有子網 + S3 VPC Endpoint 再 destroy，確認 Control Tower SCP 是否限制 VPC/IGW/NAT（見 §8） | [slice2-network-layer-verification.md](../runbooks/slice2-network-layer-verification.md) | ✅ |
 | 2 | 網路層 Terraform | VPC / 私有子網 / Security Group / VPC Endpoint（S3、Glue）正式化 | [`vpc.tf`](../../infra/environments/dev-slice2/vpc.tf)（獨立 state，依 §3.3(b)） | ✅ |
-| 3 | 交易資料模型與 generator | 依 §3.1 決定，實作交易狀態機 generator（NEW → PARTIALLY_FILLED → FILLED/CANCELLED），對來源 DB 產生 insert/update/delete；比照 `generate_stock_data.py` 保留「注入異常」開關供後續使用 | `src/ingestion/generate_trade_data.py` | ⬜ |
-| 4 | 來源 OLTP DB | 依 §3.1 建立 RDS 與 parameter group（logical replication）、初始 schema | `rds.tf` + 建表 DDL | ⬜ |
+| 3 | 交易資料模型與 generator | 依 §3.1 決定，實作交易狀態機 generator（NEW → PARTIALLY_FILLED → FILLED/CANCELLED），對來源 DB 產生 insert/update/delete；比照 `generate_stock_data.py` 保留「注入異常」開關供後續使用 | [`generate_trade_data.py`](../../src/ingestion/generate_trade_data.py)（部署為 Lambda，見 `lambda.tf`） | ✅ |
+| 4 | 來源 OLTP DB | 依 §3.1 建立 RDS 與 parameter group（logical replication）、初始 schema | [`rds.tf`](../../infra/environments/dev-slice2/rds.tf) + [建表 DDL](../../src/ingestion/sql/create_trade_table.sql) | ✅ |
 | 5 | MSK + Schema Registry | 依 §3.3 建立 cluster、topic（`transaction.trade.v1` + DLQ）、Glue Schema Registry 與相容性模式（§3.4） | `msk.tf` / `schema_registry.tf` | ⬜ |
 | 6 | Debezium plugin 打包 spike | 依 §3.2，獨立驗證 plugin zip 打包 → S3 → custom plugin 這條路徑（比照 Slice 1 GX 依賴打包的先 spike 後主線慣例） | spike 紀錄 + runbook | ⬜ |
 | 7 | CDC connector 部署 | connector 設定（來源連線、topic 命名、Avro converter、DLQ）與 IAM/VPC 授權 | 運作中的 connector | ⬜ |

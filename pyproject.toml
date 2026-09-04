@@ -4,6 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.10"
 dependencies = [
     "great-expectations>=1.19.1",
+    "pg8000>=1.31",
 ]
 
 [dependency-groups]

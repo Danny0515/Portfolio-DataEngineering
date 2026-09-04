@@ -17,3 +17,15 @@ output "glue_vpc_endpoint_id" {
 output "internal_security_group_id" {
   value = aws_security_group.slice2_internal.id
 }
+
+output "logs_vpc_endpoint_id" {
+  value = aws_vpc_endpoint.logs.id
+}
+
+output "trade_db_endpoint" {
+  value = aws_db_instance.trade.address
+}
+
+output "trade_generator_function_name" {
+  value = aws_lambda_function.trade_generator.function_name
+}

@@ -22,3 +22,4 @@
 | [ADR-0005](../architecture/adr/0005-project-admin-permission-exemption.md) | 專案總架構師帳號的 Lake Formation 權限不受本專案 Terraform 管理 | ✅ `Accepted` |
 | [ADR-0006](../architecture/adr/0006-msk-vs-kinesis.md) | 為何選 MSK 而非 Kinesis | ✅ `Accepted` |
 | [ADR-0007](../architecture/adr/0007-cdc-vs-batch-polling.md) | 為何用 CDC 而非定時撈整張表 | ✅ `Accepted` |
+| [ADR-0008](../architecture/adr/0008-lambda-vpc-access-gateway.md) | 私有子網路資源存取：以 Lambda 作為存取閘道，取代 Bastion/SSM | ✅ `Accepted` |

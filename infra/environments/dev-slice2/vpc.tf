@@ -48,6 +48,15 @@ resource "aws_security_group" "slice2_internal" {
     self        = true
   }
 
+  # §4 項目 4：RDS 建立時新增，讓 generator Lambda（同一個 SG）連得到 Postgres
+  ingress {
+    description = "Allow Postgres between SG members (Lambda generator to RDS)"
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    self        = true
+  }
+
   egress {
     description = "Allow all egress; no IGW/NAT in this VPC, so this only reaches VPC Endpoints or in-VPC peers"
     from_port   = 0
@@ -61,6 +70,17 @@ resource "aws_security_group" "slice2_internal" {
 resource "aws_vpc_endpoint" "glue" {
   vpc_id              = aws_vpc.slice2.id
   service_name        = "com.amazonaws.${var.aws_region}.glue"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = [for s in aws_subnet.private : s.id]
+  security_group_ids  = [aws_security_group.slice2_internal.id]
+  private_dns_enabled = true
+}
+
+# §4 項目 3：generator Lambda 在 VPC 內執行，沒有 IGW/NAT 就連不到 CloudWatch Logs
+# （跟連不到 S3/Glue 是同一個道理），沒有這個 endpoint 會完全看不到 Lambda 的執行輸出
+resource "aws_vpc_endpoint" "logs" {
+  vpc_id              = aws_vpc.slice2.id
+  service_name        = "com.amazonaws.${var.aws_region}.logs"
   vpc_endpoint_type   = "Interface"
   subnet_ids          = [for s in aws_subnet.private : s.id]
   security_group_ids  = [aws_security_group.slice2_internal.id]

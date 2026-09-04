@@ -477,3 +477,31 @@
 
 > `.claude/settings.json` 這次是編輯既有檔案（新增第二個 hook），不是首次建立——驗證端到端觸發時撞到設定重載限制（session 一開始就讀過的設定檔，後續編輯不會自動重新載入），跟第一個 hook（`check-decision-log.sh`）建立當下就順利驗證的情況不同。之後每次「編輯」既有 `settings.json` 新增 hook，都可能要提醒使用者手動重載才能驗證，這點值得記下來避免下次又忘記。
 
+## Session 018 — 2026-09-04
+
+- **Engineer**: Danny
+- **Role**: Data Engineer
+- **LLM Used**: Claude Code (claude-sonnet-5)
+- **Module**: slice2a-cdc-ingestion
+
+### Completed
+
+- [x] (承接 Session 017 Next Step)完成 §4 項目 3（交易資料模型與 generator）與項目 4（來源 OLTP DB / RDS）：新增 `infra/environments/dev-slice2/rds.tf`（RDS PostgreSQL 16，`rds.logical_replication=1`、`REPLICA IDENTITY FULL`、私有子網、不對外公開）與 `lambda.tf`（`slice2-trade-generator`，掛 VPC 設定直連 RDS，透過公開 `lambda:Invoke` API 從本機觸發，繞過 bastion/SSM）；新增 `src/ingestion/generate_trade_data.py`（交易生命週期模擬器，含 dirty data 注入開關）與對應 DDL；`terraform apply` 全數成功，並以 `tmp.py`（boto3 呼叫 Lambda）驗證能查到真實寫入的資料
+- [x] 討論 RDS 私有子網（無 IGW/NAT）導致本機/AWS Console 都無法直連的問題後，採用使用者提出的 Lambda 方案取代 bastion/peering/SSM，回頭新增 [ADR-0008](../../docs/architecture/adr/0008-lambda-vpc-access-gateway.md)（為何選 Lambda）與 [docs/patterns/lambda-vpc-access-gateway.md](../../docs/patterns/lambda-vpc-access-gateway.md)（Pattern Card），同步更新 `docs/arc42/09_architecture_decisions.md` 決策總表
+- [x] 修正 `.claude/hooks/check-infra-snapshot.sh` 的邏輯錯誤：原本用來判斷 `terraform apply` 是否成功的 `tool_response.success` 欄位在 Bash 工具 payload 中根本不存在，導致 jq 過濾條件恆為 false、提醒從未真正輸出過；已改為只排除 `interrupted`，並在腳本內記錄除錯過程與已知限制
+- [x] 新增第三篇 `docs/concepts/` 條目 `rds-lambda-eli5.html`（「檔案室與派遣工」比喻），圖解本次新增的 RDS／Lambda／IAM Role／Security Group 規則／CloudWatch Logs VPC Endpoint；同步更新 `overview.md` 索引
+- [x] `docs/TODO.md` 新增兩項待評估工作：generator 改為交錯執行多筆交易生命週期（目前逐筆循序執行，暫不影響 CDC 驗證核心目的）、新增整合測試分類與慣例（`generate_trade_data.py` 的 DB 寫入邏輯目前無自動化測試覆蓋是其中一個具體案例）
+- [x] 更新 `docs/specs/slice2a-cdc-ingestion.md` §4 項目 3/4 狀態 ⬜→✅、`ai/contexts/infra_dev_slice2.md` 快照（19 項資源）、`README.md`（進度/技術棧/文件導覽）
+
+### Related ADRs
+
+- 新增 [ADR-0008](../../docs/architecture/adr/0008-lambda-vpc-access-gateway.md)：私有子網路資源存取：以 Lambda 作為存取閘道，取代 Bastion/SSM
+
+### Next Steps
+
+- [ ] 依 `docs/specs/slice2a-cdc-ingestion.md` §4 實作項目清單繼續：項目 5（MSK + Schema Registry）或項目 6（Debezium plugin 打包 spike）
+
+### Notes
+
+> 新增的 `tests/ingestion/test_generate_trade_data.py` 只是鏡射 `src/` 目錄結構的純邏輯測試，本專案目前沒有正式的「整合測試」分類——`generate_trade_data.py` 裡真正會寫入資料庫的函式（`execute_operation`／`run_ddl`）目前完全沒有自動化測試覆蓋，只靠手動 `aws lambda invoke` 驗證過一次，已記錄到 TODO.md 待評估是否要引入整合測試慣例，不要因為目錄名稱含 `ingestion` 就誤以為已涵蓋端到端資料庫測試。
+
