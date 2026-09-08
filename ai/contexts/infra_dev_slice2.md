@@ -4,7 +4,7 @@
 >
 > 依 §3.3(b)「用完即拆」策略，這組資源在 Slice 2a/2b 驗證期間維持運行，驗證全部完成後才會 destroy（見 §4 項目 10 的啟停 runbook，屆時待補）——跟 [infra_dev.md](infra_dev.md)（Slice 0/1，長期持續運行）的生命週期不同，因此獨立成一份快照，不合併進同一份文件。
 
-**最後更新**：2026-09-03
+**最後更新**：2026-09-07
 **Terraform 工作目錄**：`infra/environments/dev-slice2/`（依 RULE-002，優先在本機以 `AWS_PROFILE=dt-lab-long-term-mfa` 執行）
 **State 位置**：`s3://danny-data-engineering/terraform-state/dev/slice2.tfstate`
 
@@ -20,6 +20,11 @@
 | internal_security_group_id | `sg-0a917aece7c5c922d` |
 | trade_db_endpoint | `slice2-trade.cbluumyfbmux.ap-northeast-1.rds.amazonaws.com` |
 | trade_generator_function_name | `slice2-trade-generator` |
+| msk_cluster_arn | `arn:aws:kafka:ap-northeast-1:393326654921:cluster/slice2-trade-msk/08e31904-7f2c-4b7a-8295-9c9eb1dd881d-2` |
+| msk_bootstrap_brokers_tls | `b-1.slice2trademsk.lprhxt.c2.kafka.ap-northeast-1.amazonaws.com:9094,b-2.slice2trademsk.lprhxt.c2.kafka.ap-northeast-1.amazonaws.com:9094` |
+| glue_schema_registry_name | `slice2-trade-events` |
+| glue_schema_registry_arn | `arn:aws:glue:ap-northeast-1:393326654921:registry/slice2-trade-events` |
+| trade_events_schema_arn | `arn:aws:glue:ap-northeast-1:393326654921:schema/slice2-trade-events/trade_events` |
 
 ## 已管理資源（`terraform state list`）
 
@@ -43,5 +48,9 @@
 - `aws_lambda_function.trade_generator`
 - `data.archive_file.trade_generator`
 - `data.aws_iam_policy_document.trade_generator_assume`
+- `aws_msk_configuration.trade`
+- `aws_msk_cluster.trade`
+- `aws_glue_registry.trade_events`
+- `aws_glue_schema.trade_events`
 
-> 對應 [docs/specs/slice2a-cdc-ingestion.md](../../docs/specs/slice2a-cdc-ingestion.md) §4 項目 1～4。子網 AZ 為 `ap-northeast-1a`／`ap-northeast-1c`（此帳號無 `ap-northeast-1b`，實測得知）。Security Group `slice2-internal` 現有兩條 self-referencing 規則（443 給 Interface VPC Endpoint、5432 給 RDS）；MSK 的埠號將在 §4 項目 5 建立對應資源時補上。RDS 主密碼由 `random_password.trade_db` 產生，直接寫進 Lambda 環境變數，未透過 Secrets Manager（見 `lambda.tf` 註解說明原因）。Lambda `slice2-trade-generator` 已實測跑過 `init_schema` 與 20 筆交易生成，皆成功（`operations: INSERT 20 / UPDATE 33 / DELETE 4`，CloudWatch Logs 經 `logs_vpc_endpoint_id` 正常送達）。
+> 對應 [docs/specs/slice2a-cdc-ingestion.md](../../docs/specs/slice2a-cdc-ingestion.md) §4 項目 1～5。子網 AZ 為 `ap-northeast-1a`／`ap-northeast-1c`（此帳號無 `ap-northeast-1b`，實測得知）。Security Group `slice2-internal` 現有三條 self-referencing 規則（443 給 Interface VPC Endpoint、5432 給 RDS、9094 給 MSK broker TLS）。RDS 主密碼由 `random_password.trade_db` 產生，直接寫進 Lambda 環境變數，未透過 Secrets Manager（見 `lambda.tf` 註解說明原因）。Lambda `slice2-trade-generator` 已實測跑過 `init_schema` 與 20 筆交易生成，皆成功（`operations: INSERT 20 / UPDATE 33 / DELETE 4`，CloudWatch Logs 經 `logs_vpc_endpoint_id` 正常送達）。MSK cluster `slice2-trade-msk`（Provisioned，2× `kafka.t3.small`，kafka 3.9.x，TLS-only、unauthenticated）已用 `aws kafka describe-cluster-v2` 交叉驗證為 `ACTIVE`；Glue Schema Registry `slice2-trade-events` 下的 `trade_events` schema（Avro、`BACKWARD` 相容性）已用 `aws glue get-schema` 交叉驗證為 `AVAILABLE`。Kafka topic（`transaction.trade.v1` / `.dlq`）刻意不在這裡建立，broker 已開 `auto.create.topics.enable=true`，延後到 §4 項目 7 部署 Debezium connector 時自然建立（見 `docs/TODO.md`「Kafka topic 改為正式 Terraform 管理」）。

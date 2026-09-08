@@ -21,6 +21,7 @@
 - [Python 套件跨執行環境部署的選型原則](#python-套件跨執行環境部署的選型原則)
 - [generate_trade_data.py 改為交錯執行多筆交易生命週期](#generate_trade_datapy-改為交錯執行多筆交易生命週期)
 - [新增整合測試](#新增整合測試)
+- [Kafka topic 改為正式 Terraform 管理](#kafka-topic-改為正式-terraform-管理)
 
 ---
 
@@ -111,3 +112,13 @@ Slice 2a 交易 generator 原規劃用 `psycopg[binary]` 連 RDS，改部署成 
 
 ### 執行內容
 待評估是否要在這個專案引入「整合測試」這個分類與對應慣例（例如用本機 Docker Postgres 起一個真的資料庫來測 `execute_operation` 等函式），決定後可能需要一併定義 `pytest.ini` 的新 marker 或獨立目錄慣例。`generate_trade_data.py` 的 DB 寫入邏輯補測試只是目前唯一已知的具體案例，之後若有更多類似需求（例如碰 S3/Kafka 的邏輯）一併納入這個分類評估，不要為了單一案例就零散決定慣例。
+
+---
+
+## Kafka topic 改為正式 Terraform 管理
+
+### 背景與原因
+§4 項目 5（MSK + Schema Registry）決定把 `transaction.trade.v1` / `.dlq` 的建立延後到項目 7，靠 broker 的 `auto.create.topics.enable=true` 讓 Debezium connector 第一次寫入時自動建立。理由：Terraform 的 AWS provider 沒有原生的 topic 資源，正式管理需要額外掛非官方的 `Mongey/kafka` provider、或重用 ADR-0008 的 Lambda 存取閘道模式另外寫一支建立腳本，範圍超出項目 5。副作用：auto-create 出來的 topic 用 broker 預設值（partition 數、retention 等），沒有明確納入版控。
+
+### 執行內容
+待 CDC pipeline 主線（項目 5-9）跑穩、確認實際需要的 partition/retention 設定後，評估是否改成正式 Terraform 管理（`Mongey/kafka` provider 直連 broker，或重用 ADR-0008 pattern 寫建立腳本），取代目前 auto-create 的預設值；若最終決定維持 auto-create（demo 用途已足夠），直接刪除本項目，不必再處理。

@@ -505,3 +505,30 @@
 
 > 新增的 `tests/ingestion/test_generate_trade_data.py` 只是鏡射 `src/` 目錄結構的純邏輯測試，本專案目前沒有正式的「整合測試」分類——`generate_trade_data.py` 裡真正會寫入資料庫的函式（`execute_operation`／`run_ddl`）目前完全沒有自動化測試覆蓋，只靠手動 `aws lambda invoke` 驗證過一次，已記錄到 TODO.md 待評估是否要引入整合測試慣例，不要因為目錄名稱含 `ingestion` 就誤以為已涵蓋端到端資料庫測試。
 
+## Session 019 — 2026-09-08
+
+- **Engineer**: Danny
+- **Role**: Data Engineer
+- **LLM Used**: Claude Code (claude-sonnet-5)
+- **Module**: slice2a-cdc-ingestion
+
+### Completed
+
+- [x] (承接 Session 018 Next Step)完成 §4 項目 5（MSK + Schema Registry）：新增 `infra/environments/dev-slice2/msk.tf`（Provisioned MSK，2× `kafka.t3.small`，Kafka 3.9.x，TLS-only、unauthenticated，`auto.create.topics.enable=true`）與 `schema_registry.tf`（Glue Registry + `trade_events` Avro schema，相容性 `BACKWARD`）；`vpc.tf` 新增 9094 broker port 的 SG 規則、`outputs.tf` 新增 5 個 output；`terraform apply` 成功（4 added, 1 changed，MSK cluster 佈建耗時 28m16s），並以 `aws kafka describe-cluster-v2`／`aws glue get-registry`／`aws glue get-schema` 交叉驗證皆為 `ACTIVE`/`AVAILABLE`
+- [x] 拍板兩個 spec §3 沒覆蓋的實作級決策：(a) MSK client 認證採 Unauthenticated + TLS in-transit，存取控制交給 Security Group，跟 RDS 同一哲學；(b) `transaction.trade.v1`／`.dlq` topic 不在本項目建立（Terraform AWS provider 無原生 topic 資源），延後到項目 7 部署 Debezium connector 時靠 broker auto-create 自然產生
+- [x] 討論項目 5 與項目 6（Debezium plugin 打包 spike）的執行順序，確認分開處理、項目 5 先行——項目 6 至少部分依賴項目 5 的 MSK cluster 已存在，且兩者驗證節奏不同（確定性 Terraform vs. 探索性 spike，可能需要重新選型）
+- [x] `docs/TODO.md` 新增「Kafka topic 改為正式 Terraform 管理」項目，記錄 auto-create 這個範圍取捨的副作用（topic 用 broker 預設值，未納入版控），待 CDC pipeline 主線跑穩後再評估是否改用 `Mongey/kafka` provider 或重用 ADR-0008 pattern
+- [x] 更新 `docs/specs/slice2a-cdc-ingestion.md` §4 項目 5 狀態 ⬜→✅、`ai/contexts/infra_dev_slice2.md` 快照（23 項資源，含新增的 MSK cluster/configuration、Glue registry/schema）
+
+### Related ADRs
+
+- 無新增 ADR（本項目兩個實作級決策屬「藍圖沒回答的落地細節」，比照 §3.3/§3.4 其他同類決定不需要 ADR）
+
+### Next Steps
+
+- [ ] 依 `docs/specs/slice2a-cdc-ingestion.md` §4 實作項目清單繼續：項目 6（Debezium plugin 打包 spike）
+
+### Notes
+
+> 過程中兩個插曲：(1) Auto Mode 分類器再次擋下 `terraform apply`（同 Session 014 卡點），使用者切換權限模式後才放行；(2) 背景執行的 Bash 指令不繼承前一個指令用 `cd` 切換的工作目錄，第一次 `apply` 因此失敗（`No configuration files`），加上明確 `cd` 後才正常——過程中意外確認 `check-infra-snapshot.sh` hook 這次真的有觸發（第一次因無法從指令判斷環境名稱只給出通用提醒，第二次帶 `cd` 後正確解析出 `dev-slice2`），解決了 Session 017/018 一直卡住的「hook 註冊要等新 session 才載入」疑問。
+

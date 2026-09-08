@@ -57,6 +57,16 @@ resource "aws_security_group" "slice2_internal" {
     self        = true
   }
 
+  # §4 項目 5：MSK broker 建立時新增，讓同一個 SG 成員（未來 §4 項目 7 的 MSK Connect、
+  # 驗證用的 Kafka client）連得到 broker 的 TLS 埠
+  ingress {
+    description = "Allow Kafka TLS broker port between SG members (MSK Connect / verification clients to MSK brokers)"
+    from_port   = 9094
+    to_port     = 9094
+    protocol    = "tcp"
+    self        = true
+  }
+
   egress {
     description = "Allow all egress; no IGW/NAT in this VPC, so this only reaches VPC Endpoints or in-VPC peers"
     from_port   = 0

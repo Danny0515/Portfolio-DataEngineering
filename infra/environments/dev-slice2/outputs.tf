@@ -29,3 +29,23 @@ output "trade_db_endpoint" {
 output "trade_generator_function_name" {
   value = aws_lambda_function.trade_generator.function_name
 }
+
+output "msk_cluster_arn" {
+  value = aws_msk_cluster.trade.arn
+}
+
+output "msk_bootstrap_brokers_tls" {
+  value = aws_msk_cluster.trade.bootstrap_brokers_tls
+}
+
+output "glue_schema_registry_name" {
+  value = aws_glue_registry.trade_events.registry_name
+}
+
+output "glue_schema_registry_arn" {
+  value = aws_glue_registry.trade_events.arn
+}
+
+output "trade_events_schema_arn" {
+  value = aws_glue_schema.trade_events.arn
+}
