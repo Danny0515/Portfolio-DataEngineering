@@ -532,3 +532,30 @@
 
 > 過程中兩個插曲：(1) Auto Mode 分類器再次擋下 `terraform apply`（同 Session 014 卡點），使用者切換權限模式後才放行；(2) 背景執行的 Bash 指令不繼承前一個指令用 `cd` 切換的工作目錄，第一次 `apply` 因此失敗（`No configuration files`），加上明確 `cd` 後才正常——過程中意外確認 `check-infra-snapshot.sh` hook 這次真的有觸發（第一次因無法從指令判斷環境名稱只給出通用提醒，第二次帶 `cd` 後正確解析出 `dev-slice2`），解決了 Session 017/018 一直卡住的「hook 註冊要等新 session 才載入」疑問。
 
+## Session 020 — 2026-09-08
+
+- **Engineer**: Danny
+- **Role**: Data Engineer
+- **LLM Used**: Claude Code (claude-sonnet-5)
+- **Module**: slice2a-cdc-ingestion
+
+### Completed
+
+- [x] (承接 Session 019 Next Step)完成 §4 項目 6（Debezium plugin 打包 spike）：新增 `infra/environments/dev-slice2/msk_connect_plugin.tf`，把 Debezium PostgreSQL connector（3.1.1.Final）與 AWS Glue Schema Registry Kafka Connect converter（1.1.25）各自打包成 zip、上傳到新建的專屬 S3 bucket，註冊成兩個 `aws_mskconnect_custom_plugin`；動手前先用 curl/WebFetch 即時查證 Debezium tar.gz 結構、converter jar 大小（67MB，自帶依賴的 uber jar）、MSK Connect 失敗狀態的正確名稱（`CREATE_FAILED`，非原先假設的 `FAILED`），`terraform apply` 後兩個 plugin 第一次嘗試就都是 `ACTIVE`，用 `aws kafkaconnect describe-custom-plugin` 交叉驗證
+- [x] 修正一個實作過程中的坑：converter jar 原本想用 `filemd5()` 當 `aws_s3_object` 的 `etag`，但這是純函式、不會等 `local-exec` 產生檔案才求值，`terraform validate` 直接報錯；改用 `data.archive_file` 包一層解決（跟 Debezium 那邊同一套模式）
+- [x] 新增 [docs/runbooks/slice2-msk-connect-plugin-packaging-verification.md](../../docs/runbooks/slice2-msk-connect-plugin-packaging-verification.md)，更新 spec 項目 6 狀態 ⬜→✅、`ai/contexts/infra_dev_slice2.md` 快照（33 項資源）
+- [x] 用 `/explain-infra` 重新轉譯 `dev-slice2` 環境：新增 `msk_connect_plugin.tf` 章節（打包來源與內容／儲存與 MSK Connect 註冊／範圍界線與生命週期三個主題），同步 `outputs.tf` 章節（18 個 output）；把這個新服務類型的固定主題清單登記進 skill 自己的 `references/output-format.md`，供之後重新轉譯沿用
+- [x] 微調 `explain-infra` 輸出模板用詞（章節開頭標籤「一句話」→「總結」），連帶讓 `dev`／`dev-slice2` 兩個環境既有的 `README.md` 維持用詞一致
+
+### Related ADRs
+
+- 無新增 ADR
+
+### Next Steps
+
+- [ ] 依 `docs/specs/slice2a-cdc-ingestion.md` §4 實作項目清單繼續：項目 7（CDC connector 部署）
+
+### Notes
+
+> 這次 apply 全程零失敗——打包格式、S3 上傳、MSK Connect 註冊三個關鍵假設一次就對，跟項目 6 本身「先花大量時間即時查證再動手」的節奏直接相關：實作前用 WebFetch/curl 逐一驗證了 `kafka_version` 格式、Debezium tar.gz 實際解壓結構、converter jar 是否為自帶依賴的 uber jar，把不確定性壓在動手前而不是動手後才發現，跟項目 5 MSK cluster 佈建（28 分鐘、但期間沒有需要排查的意外）是同一種工作方式的延續。
+

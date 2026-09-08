@@ -4,7 +4,7 @@
 >
 > 依 §3.3(b)「用完即拆」策略，這組資源在 Slice 2a/2b 驗證期間維持運行，驗證全部完成後才會 destroy（見 §4 項目 10 的啟停 runbook，屆時待補）——跟 [infra_dev.md](infra_dev.md)（Slice 0/1，長期持續運行）的生命週期不同，因此獨立成一份快照，不合併進同一份文件。
 
-**最後更新**：2026-09-07
+**最後更新**：2026-09-08
 **Terraform 工作目錄**：`infra/environments/dev-slice2/`（依 RULE-002，優先在本機以 `AWS_PROFILE=dt-lab-long-term-mfa` 執行）
 **State 位置**：`s3://danny-data-engineering/terraform-state/dev/slice2.tfstate`
 
@@ -25,6 +25,11 @@
 | glue_schema_registry_name | `slice2-trade-events` |
 | glue_schema_registry_arn | `arn:aws:glue:ap-northeast-1:393326654921:registry/slice2-trade-events` |
 | trade_events_schema_arn | `arn:aws:glue:ap-northeast-1:393326654921:schema/slice2-trade-events/trade_events` |
+| msk_connect_plugin_bucket_name | `danny-data-engineering-slice2-msk-connect` |
+| debezium_postgres_plugin_arn | `arn:aws:kafkaconnect:ap-northeast-1:393326654921:custom-plugin/slice2-debezium-postgres-plugin/8c305182-79b1-41c0-9255-899f56f3c8a0-2` |
+| debezium_postgres_plugin_latest_revision | `1` |
+| glue_schema_registry_converter_plugin_arn | `arn:aws:kafkaconnect:ap-northeast-1:393326654921:custom-plugin/slice2-glue-schema-registry-converter-plugin/1b27c571-395d-48f7-b73b-f94c125a5a21-2` |
+| glue_schema_registry_converter_plugin_latest_revision | `1` |
 
 ## 已管理資源（`terraform state list`）
 
@@ -52,5 +57,15 @@
 - `aws_msk_cluster.trade`
 - `aws_glue_registry.trade_events`
 - `aws_glue_schema.trade_events`
+- `aws_s3_bucket.msk_connect_plugins`
+- `aws_s3_bucket_public_access_block.msk_connect_plugins`
+- `null_resource.build_debezium_postgres_plugin`
+- `data.archive_file.debezium_postgres_plugin`
+- `aws_s3_object.debezium_postgres_plugin`
+- `aws_mskconnect_custom_plugin.debezium_postgres`
+- `null_resource.build_glue_schema_registry_converter_plugin`
+- `data.archive_file.glue_schema_registry_converter_plugin`
+- `aws_s3_object.glue_schema_registry_converter_plugin`
+- `aws_mskconnect_custom_plugin.glue_schema_registry_converter`
 
-> 對應 [docs/specs/slice2a-cdc-ingestion.md](../../docs/specs/slice2a-cdc-ingestion.md) §4 項目 1～5。子網 AZ 為 `ap-northeast-1a`／`ap-northeast-1c`（此帳號無 `ap-northeast-1b`，實測得知）。Security Group `slice2-internal` 現有三條 self-referencing 規則（443 給 Interface VPC Endpoint、5432 給 RDS、9094 給 MSK broker TLS）。RDS 主密碼由 `random_password.trade_db` 產生，直接寫進 Lambda 環境變數，未透過 Secrets Manager（見 `lambda.tf` 註解說明原因）。Lambda `slice2-trade-generator` 已實測跑過 `init_schema` 與 20 筆交易生成，皆成功（`operations: INSERT 20 / UPDATE 33 / DELETE 4`，CloudWatch Logs 經 `logs_vpc_endpoint_id` 正常送達）。MSK cluster `slice2-trade-msk`（Provisioned，2× `kafka.t3.small`，kafka 3.9.x，TLS-only、unauthenticated）已用 `aws kafka describe-cluster-v2` 交叉驗證為 `ACTIVE`；Glue Schema Registry `slice2-trade-events` 下的 `trade_events` schema（Avro、`BACKWARD` 相容性）已用 `aws glue get-schema` 交叉驗證為 `AVAILABLE`。Kafka topic（`transaction.trade.v1` / `.dlq`）刻意不在這裡建立，broker 已開 `auto.create.topics.enable=true`，延後到 §4 項目 7 部署 Debezium connector 時自然建立（見 `docs/TODO.md`「Kafka topic 改為正式 Terraform 管理」）。
+> 對應 [docs/specs/slice2a-cdc-ingestion.md](../../docs/specs/slice2a-cdc-ingestion.md) §4 項目 1～6。子網 AZ 為 `ap-northeast-1a`／`ap-northeast-1c`（此帳號無 `ap-northeast-1b`，實測得知）。Security Group `slice2-internal` 現有三條 self-referencing 規則（443 給 Interface VPC Endpoint、5432 給 RDS、9094 給 MSK broker TLS）。RDS 主密碼由 `random_password.trade_db` 產生，直接寫進 Lambda 環境變數，未透過 Secrets Manager（見 `lambda.tf` 註解說明原因）。Lambda `slice2-trade-generator` 已實測跑過 `init_schema` 與 20 筆交易生成，皆成功（`operations: INSERT 20 / UPDATE 33 / DELETE 4`，CloudWatch Logs 經 `logs_vpc_endpoint_id` 正常送達）。MSK cluster `slice2-trade-msk`（Provisioned，2× `kafka.t3.small`，kafka 3.9.x，TLS-only、unauthenticated）已用 `aws kafka describe-cluster-v2` 交叉驗證為 `ACTIVE`；Glue Schema Registry `slice2-trade-events` 下的 `trade_events` schema（Avro、`BACKWARD` 相容性）已用 `aws glue get-schema` 交叉驗證為 `AVAILABLE`。Kafka topic（`transaction.trade.v1` / `.dlq`）刻意不在這裡建立，broker 已開 `auto.create.topics.enable=true`，延後到 §4 項目 7 部署 Debezium connector 時自然建立（見 `docs/TODO.md`「Kafka topic 改為正式 Terraform 管理」）。§4 項目 6：新建 bucket `danny-data-engineering-slice2-msk-connect` 存放 MSK Connect plugin artifact，兩個 `aws_mskconnect_custom_plugin`（Debezium PostgreSQL connector 3.1.1.Final、AWS Glue Schema Registry converter 1.1.25）第一次 apply 就都是 `ACTIVE`，已用 `aws kafkaconnect describe-custom-plugin` 交叉驗證；細節見 [slice2-msk-connect-plugin-packaging-verification.md](../runbooks/slice2-msk-connect-plugin-packaging-verification.md)。

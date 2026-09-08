@@ -49,3 +49,23 @@ output "glue_schema_registry_arn" {
 output "trade_events_schema_arn" {
   value = aws_glue_schema.trade_events.arn
 }
+
+output "msk_connect_plugin_bucket_name" {
+  value = aws_s3_bucket.msk_connect_plugins.id
+}
+
+output "debezium_postgres_plugin_arn" {
+  value = aws_mskconnect_custom_plugin.debezium_postgres.arn
+}
+
+output "debezium_postgres_plugin_latest_revision" {
+  value = aws_mskconnect_custom_plugin.debezium_postgres.latest_revision
+}
+
+output "glue_schema_registry_converter_plugin_arn" {
+  value = aws_mskconnect_custom_plugin.glue_schema_registry_converter.arn
+}
+
+output "glue_schema_registry_converter_plugin_latest_revision" {
+  value = aws_mskconnect_custom_plugin.glue_schema_registry_converter.latest_revision
+}

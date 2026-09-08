@@ -39,7 +39,7 @@
 <a id="versions-tf"></a>
 ## `versions.tf` — Terraform 版本與 State 設定
 
-**一句話**：鎖定 Terraform 與 AWS provider 版本，並把 state 存進本專案自己的 S3 bucket，用 S3 原生 lockfile 機制取代舊式的 DynamoDB lock table。
+**總結**：鎖定 Terraform 與 AWS provider 版本，並把 state 存進本專案自己的 S3 bucket，用 S3 原生 lockfile 機制取代舊式的 DynamoDB lock table。
 
 | 資源 | 白話說明 | 關鍵設定 | 出處 |
 | --- | --- | --- | --- |
@@ -57,7 +57,7 @@
 <a id="provider-tf"></a>
 ## `provider.tf` — AWS Provider 設定
 
-**一句話**：設定 AWS Provider 要部署到哪個 region，值直接來自 `var.aws_region`。
+**總結**：設定 AWS Provider 要部署到哪個 region，值直接來自 `var.aws_region`。
 
 | 資源 | 白話說明 | 關鍵設定 | 出處 |
 | --- | --- | --- | --- |
@@ -66,7 +66,7 @@
 <a id="variables-tf"></a>
 ## `variables.tf` — 輸入變數
 
-**一句話**：定義 5 個輸入變數，涵蓋 region、bucket 名稱、S3 key prefix、與 Medallion database 命名；其中 3 個被 `terraform.tfvars` 覆蓋（覆蓋值與預設值相同），另外 2 個維持預設值。
+**總結**：定義 5 個輸入變數，涵蓋 region、bucket 名稱、S3 key prefix、與 Medallion database 命名；其中 3 個被 `terraform.tfvars` 覆蓋（覆蓋值與預設值相同），另外 2 個維持預設值。
 
 | 資源 | 白話說明 | 關鍵設定 | 出處 |
 | --- | --- | --- | --- |
@@ -86,7 +86,7 @@
 <a id="s3-tf"></a>
 ## `s3.tf` — 資料湖 Bucket
 
-**一句話**：建一個資料湖 bucket，同時扮演 raw landing 區與 Iceberg lakehouse 倉儲，開啟版本控制與加密，並封鎖所有公開存取。
+**總結**：建一個資料湖 bucket，同時扮演 raw landing 區與 Iceberg lakehouse 倉儲，開啟版本控制與加密，並封鎖所有公開存取。
 
 ### 1. 儲存空間與版本控制
 
@@ -117,7 +117,7 @@
 <a id="iam-tf"></a>
 ## `iam.tf` — Glue 執行角色與權限
 
-**一句話**：建一個 Glue Job 共用的執行角色，掛官方 Glue Service Role 政策，再疊加一份客製政策，只放行到本專案 S3 前綴與三個 Medallion database 的存取。
+**總結**：建一個 Glue Job 共用的執行角色，掛官方 Glue Service Role 政策，再疊加一份客製政策，只放行到本專案 S3 前綴與三個 Medallion database 的存取。
 
 ### 1. 執行角色與信任關係
 
@@ -152,7 +152,7 @@
 <a id="glue-tf"></a>
 ## `glue.tf` — Glue Catalog 與 ETL Job
 
-**一句話**：建立 Medallion 三層的 Glue Catalog database，再串三個 Glue ETL Job（Bronze 落地 → Silver 轉換與資料品質檢查 → Gold 月頻聚合），全部讀寫同一個 bucket 裡的 Iceberg table。
+**總結**：建立 Medallion 三層的 Glue Catalog database，再串三個 Glue ETL Job（Bronze 落地 → Silver 轉換與資料品質檢查 → Gold 月頻聚合），全部讀寫同一個 bucket 裡的 Iceberg table。
 
 ### 1. Glue Catalog database 與 Medallion 分層
 
@@ -205,7 +205,7 @@
 <a id="lakeformation-tf"></a>
 ## `lakeformation.tf` — Lake Formation 授權
 
-**一句話**：因為本帳號的 Glue Catalog 不會自動退回舊版 IAM_ALLOWED_PRINCIPALS 模式，這裡另外對 Glue 執行角色補一組 Lake Formation 授權，涵蓋三個 Medallion database 與其下所有 table。
+**總結**：因為本帳號的 Glue Catalog 不會自動退回舊版 IAM_ALLOWED_PRINCIPALS 模式，這裡另外對 Glue 執行角色補一組 Lake Formation 授權，涵蓋三個 Medallion database 與其下所有 table。
 
 ### 1. Database 與 Table 授權範圍
 
@@ -234,7 +234,7 @@
 <a id="outputs-tf"></a>
 ## `outputs.tf` — 部署後才知道的值
 
-**一句話**：吐出 8 個部署後可用的值，涵蓋 bucket 名稱、S3 路徑、Glue database 清單、IAM 角色 ARN、與三個 Glue Job 名稱，供驗證與後續操作（如 `aws glue start-job-run`）使用。
+**總結**：吐出 8 個部署後可用的值，涵蓋 bucket 名稱、S3 路徑、Glue database 清單、IAM 角色 ARN、與三個 Glue Job 名稱，供驗證與後續操作（如 `aws glue start-job-run`）使用。
 
 | 資源 | 白話說明 | 關鍵設定 | 出處 |
 | --- | --- | --- | --- |
