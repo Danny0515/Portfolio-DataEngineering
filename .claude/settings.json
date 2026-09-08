@@ -20,6 +20,16 @@
             "statusMessage": "檢查 terraform apply 是否需要同步 infra 快照"
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/check-tf-translation.sh",
+            "statusMessage": "檢查 .tf 異動是否需要重新轉譯白話說明"
+          }
+        ]
       }
     ]
   }

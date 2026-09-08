@@ -100,6 +100,6 @@
 | [docs/data-dictionary/](docs/data-dictionary/) | 資料字典總覽，各資料領域現況 |
 | [docs/runbooks/](docs/runbooks/) | 維運手冊（AWS 存取、故障排除、各 Slice 驗證紀錄） |
 | [docs/concepts/](docs/concepts/) | 零基礎技術概念解說／學習筆記，加速無背景知識者上手 |
-| [infra/](infra/) | Terraform IaC，依 Slice 切分獨立 state（`environments/dev`、`environments/dev-slice2`） |
+| [infra/](infra/) | Terraform IaC，依 Slice 切分獨立 state（`environments/dev`、`environments/dev-slice2`）；各 env 目錄下的 `README.md` 為該環境 `.tf` 的白話轉譯 |
 | [src/](src/) | 原始碼：`ingestion/`（模擬資料 generator）、`quality/`（品質檢核規則）、`transform/`（Glue Job 轉換邏輯） |
 | [ai/contexts/](ai/contexts/) | Agent 執行規則、infra 現況快照、開發 session 紀錄 |
