@@ -4,14 +4,14 @@
 >
 > 這是「原始碼意圖」的轉譯，不是部署現況——實際 resource ID／endpoint／密碼等 apply 後才產生的值，見 [ai/contexts/infra_dev_slice2.md](../../../ai/contexts/infra_dev_slice2.md)。
 
-**最後轉譯**：2026-09-08
-**來源**：`infra/environments/dev-slice2/*.tf`（10 個檔案）
+**最後轉譯**：2026-09-14
+**來源**：`infra/environments/dev-slice2/*.tf`（11 個檔案）
 
 ## 這個環境在做什麼
 
 這是 Slice 2 CDC 管線的來源端。一台 PostgreSQL 當作交易系統的 OLTP 資料庫，一支 Lambda 定期往裡面塞模擬的交易資料（新增／更新／刪除都有，才有 CDC 可以擷取），旁邊架一組 Kafka（MSK）等著接 CDC 訊息，另外在 Glue Schema Registry 註冊了交易事件的 Avro schema 來管控欄位變更。
 
-再往下一步，把 Debezium PostgreSQL connector 跟 AWS Glue Schema Registry 的 Kafka Connect converter 各自打包成 MSK Connect 看得懂的格式（zip 丟 S3、註冊成 custom plugin），先備好料——這一步還沒有真的把 connector 接上去跑，只是確認「打包這條路走得通」。
+再往下一步，Debezium PostgreSQL connector 跟 AWS Glue Schema Registry 的 Kafka Connect converter 已經合併打包成 MSK Connect 看得懂的格式，正式建成一個 connector 掛上去跑——RDS 的異動現在會即時被擷取，經 `RegexRouter` 改名、`AWSKafkaAvroConverter` 序列化後送進 `transaction.trade.v1` 這個 Kafka topic，已用唯讀 CLI 交叉驗證為 `RUNNING`。
 
 整組資源關在一個沒有對外通道的私有 VPC 裡——沒有 Internet Gateway 也沒有 NAT，要連 AWS 服務只能走 VPC Endpoint。這也是為什麼資料 generator 做成 Lambda 而不是本機腳本：你的筆電沒有任何路徑可以直接連進去。
 
@@ -28,7 +28,8 @@
 - [`lambda.tf` — 交易資料 generator](#lambda-tf)
 - [`msk.tf` — Kafka 叢集](#msk-tf)
 - [`schema_registry.tf` — 交易事件 Schema 治理](#schema_registry-tf)
-- [`msk_connect_plugin.tf` — Debezium plugin 打包](#msk_connect_plugin-tf)
+- [`msk_connect_plugin.tf` — Debezium plugin 打包（歷史 spike，未被使用）](#msk_connect_plugin-tf)
+- [`msk_connector.tf` — CDC connector 部署](#msk_connector-tf)
 - [`outputs.tf` — 部署後才知道的值](#outputs-tf)
 
 ## 檔案總覽與相依關係
@@ -38,12 +39,13 @@
 | `versions.tf` | 鎖定 Terraform／provider 版本，指定 state 存哪裡 | — | 全部 |
 | `provider.tf` | 指定資源要開在哪個 region | `variables.tf` | 全部 |
 | `variables.tf` | 可調參數：region 與私有子網網段 | — | `provider.tf`、`vpc.tf` |
-| `vpc.tf` | 網路地基：私有網段、路由、防火牆、對外通道 | `variables.tf` | `rds.tf`、`lambda.tf`、`msk.tf` |
-| `rds.tf` | 來源 OLTP 資料庫（PostgreSQL），已開 CDC 前提 | `vpc.tf` | `lambda.tf` |
+| `vpc.tf` | 網路地基：私有網段、路由、防火牆、對外通道 | `variables.tf` | `rds.tf`、`lambda.tf`、`msk.tf`、`msk_connector.tf` |
+| `rds.tf` | 來源 OLTP 資料庫（PostgreSQL），已開 CDC 前提 | `vpc.tf` | `lambda.tf`、`msk_connector.tf` |
 | `lambda.tf` | 模擬交易資料的 generator，跑在 VPC 內 | `vpc.tf`、`rds.tf` | — |
-| `msk.tf` | Kafka 叢集本體，等著接 CDC 訊息 | `vpc.tf` | — |
-| `schema_registry.tf` | 交易事件的 Avro schema 與相容性規則 | — | — |
-| `msk_connect_plugin.tf` | 把 Debezium／Glue SR converter 打包成 MSK Connect plugin | — | （未來的 connector 設定會用到） |
+| `msk.tf` | Kafka 叢集本體，等著接 CDC 訊息 | `vpc.tf` | `msk_connector.tf` |
+| `schema_registry.tf` | 交易事件的 Avro schema 與相容性規則 | — | `msk_connector.tf` |
+| `msk_connect_plugin.tf` | 把 Debezium／Glue SR converter 打包成 MSK Connect plugin（歷史 spike，未被使用） | — | `msk_connector.tf`（共用 S3 bucket） |
+| `msk_connector.tf` | 合併打包真正會用的 plugin，建 IAM Role 與 CDC connector 本體 | `vpc.tf`、`rds.tf`、`msk.tf`、`schema_registry.tf`、`msk_connect_plugin.tf` | — |
 | `outputs.tf` | 把部署後才知道的值（ID／endpoint）吐出來 | 全部 | — |
 
 <a id="versions-tf"></a>
@@ -303,15 +305,15 @@
 | `side` 跟 `status` 可以填什麼值？ | `side`：`BUY`／`SELL`。`status`：`NEW`／`PARTIALLY_FILLED`／`FILLED`／`CANCELLED` |
 
 <a id="msk_connect_plugin-tf"></a>
-## `msk_connect_plugin.tf` — Debezium plugin 打包
+## `msk_connect_plugin.tf` — Debezium plugin 打包（歷史 spike，未被使用）
 
-**總結**：把 Debezium PostgreSQL connector 跟 AWS Glue Schema Registry 的 Kafka Connect converter 各自打包成 zip 上傳 S3，註冊成兩個 MSK Connect custom plugin——這一步只是「備料」，還沒有真的接上 Kafka 去跑。
+**總結**：把 Debezium PostgreSQL connector 跟 AWS Glue Schema Registry 的 Kafka Connect converter 各自打包成 zip 上傳 S3，註冊成兩個 MSK Connect custom plugin——這一步只是「備料」，還沒有真的接上 Kafka 去跑。**這兩個 plugin 最終沒有被真正的 connector 引用**，詳見下方 ⚠️ 與 [`msk_connector.tf`](#msk_connector-tf)。
 
 ### 1. 打包來源與內容
 
 - **Debezium PostgreSQL connector**：直接從 Maven Central 下載官方 `-plugin` classifier 的 tar.gz（版本 `3.1.1.Final`），這包本身已經自帶完整依賴（`debezium-core`／`debezium-api`／PostgreSQL driver／`protobuf-java` 等 5 個 jar），不需要另外湊——已用 curl 實測驗證過解壓結構
 - **AWS Glue Schema Registry converter**：從 Maven Central 下載 `software.amazon.glue:schema-registry-kafkaconnect-converter`（版本 `1.1.25`），是一顆 67MB 的 uber jar，已經打包好所有依賴（AWS SDK／Avro／Jackson 等），不需要額外用 Maven 湊 transitive dependency——這個推論已經過實際 apply 驗證成立，兩個 plugin 第一次嘗試就都到 `ACTIVE`
-- **兩者分開打包，不合併成一個 zip**：MSK Connect 的 connector 本來就能同時掛多個 plugin；分開後如果其中一個出問題，能立刻知道是哪一半的鍋，不用在合併後的單一 zip 裡大海撈針
+- **兩者分開打包，不合併成一個 zip**：當時的判斷是「MSK Connect 的 connector 本來就能同時掛多個 plugin」，分開後如果其中一個出問題能立刻孤立問題範圍——**這個判斷事後查證是錯的**，見下方 ⚠️ 注意
 
 ### 2. 儲存與 MSK Connect 註冊
 
@@ -320,9 +322,9 @@
 
 ### 3. 範圍界線與生命週期
 
-- **只做到「plugin 可用」，不建 connector**：這兩個 custom plugin 建好之後，還沒有任何東西真的在消費 Kafka 訊息——接上真正的 CDC pipeline（連線 RDS、寫進 topic）是下一步（spec §4 項目 7）的工作
+- **只做到「plugin 可用」，不建 connector**：這兩個 custom plugin 建好之後，還沒有任何東西真的在消費 Kafka 訊息——接上真正的 CDC pipeline（連線 RDS、寫進 topic）是下一步（spec §4 項目 7）的工作。**項目 7 實際上另外合併打包了第三個 plugin 才接上**，這裡的兩個 plugin 本身沒被引用
 - **不碰 VPC、不需要新的 IAM Role**：註冊 custom plugin 純粹是 S3 + MSK Connect 的 control plane 操作，跟這個環境已有的 VPC／Security Group 完全無關
-- **保留、不銷毀**：這兩個 plugin 是下一步真正接 connector 時要直接引用的產出，會留到整個 Slice 2 都驗收完才收尾，不是驗完即丟的 spike 資源
+- **保留、不銷毀**：這兩個 plugin 是「各元件個別能打包成功」的歷史 spike 證據，會留到整個 Slice 2 都驗收完才收尾，不是驗完即丟的 spike 資源
 
 **對照表（原始碼出處）**
 
@@ -337,18 +339,74 @@
 
 | 你會問 | 答案 |
 | --- | --- |
-| 這步做完，Debezium 就開始擷取 CDC 了嗎？ | **還沒。** 這裡只是把兩個 plugin 準備好、註冊到 MSK Connect，真正接上 RDS／Kafka 是下一步（spec §4 項目 7） |
-| 我要另外準備 IAM Role 給這個檔案用嗎？ | 不用，這個檔案完全沒有 IAM／VPC 資源，全部留給項目 7 的 connector 處理 |
+| 這步做完，Debezium 就開始擷取 CDC 了嗎？ | **沒有，而且永遠不會**——這裡只是把兩個 plugin 準備好、註冊到 MSK Connect，真正接上 RDS／Kafka 用的是 `msk_connector.tf` 另外合併打包的第三個 plugin |
+| 我要另外準備 IAM Role 給這個檔案用嗎？ | 不用，這個檔案完全沒有 IAM／VPC 資源，全部在 `msk_connector.tf` 處理 |
 | plugin 的實際 ARN／revision 在哪查？ | 部署後才決定，見 [infra 快照](../../../ai/contexts/infra_dev_slice2.md) 或 `outputs.tf` 的對應 output |
 
 **⚠️ 注意 / 限制**
 
 - S3 bucket 名稱是全球唯一，`danny-data-engineering-slice2-msk-connect` 這個名字理論上有極小機率被其他 AWS 帳號搶先使用，若真的撞名需要改名重 apply
+- **這兩個 plugin 最終沒有被使用**：當初「分開打包」的理由（`CreateConnector` API 接受多個 plugin 清單）事後查證是錯的——MSK Connect 一個 connector 只能掛一個 custom plugin。`msk_connector.tf` 因此另外合併打包成第三個 plugin，這裡的兩個 plugin 只作為「個別元件能打包成功」的歷史 spike 證據保留，不會被任何 connector 引用（背景與未來重用方式見 [docs/patterns/msk-connect-single-plugin-per-connector.md](../../../docs/patterns/msk-connect-single-plugin-per-connector.md)）
+
+<a id="msk_connector-tf"></a>
+## `msk_connector.tf` — CDC connector 部署
+
+**總結**：把項目 6 兩個各自打包的 plugin 合併成一個真正能用的 plugin，配一個專屬 IAM Role，正式建立一個會執行的 Debezium connector，把 RDS 的異動即時送進 Kafka——已用 `aws kafkaconnect describe-connector` 交叉驗證為 `RUNNING`。
+
+### 1. 合併版 Plugin 打包
+
+- **為什麼要重新打包**：MSK Connect 的 `CreateConnector` 一個 connector 只能引用一個 plugin，`msk_connect_plugin.tf` 分開打包的兩個獨立 plugin 用不了，這裡重新獨立下載、合併成第三個 plugin
+- **內容**：跟 `msk_connect_plugin.tf` 用同一組來源（Debezium `3.1.1.Final` tar.gz + Glue Schema Registry converter `1.1.25` jar），但不依賴那兩個既有的 build 目錄，避免耦合到不相關資源的 apply 順序
+- **上傳位置**：沿用 `msk_connect_plugin.tf` 建立的同一個 S3 bucket，新的 key
+
+### 2. IAM 執行角色與權限
+
+- **Trust policy 的妥協設計**：AWS 官方建議精確比對 connector 自己的 ARN，但那個 ARN 要 connector 建立後才存在，Terraform 沒辦法在建 Role 當下就知道；改成 `SourceAccount` 精確比對 + `SourceArn` 只在隨機 UUID 段用萬用字元，connector 名稱本身仍是固定字串（決策記錄見 [ADR-0009](../../../docs/architecture/adr/0009-msk-connect-trust-policy-sourcearn-tradeoff.md)）
+- **因為 MSK cluster 是 unauthenticated**：不需要官方文件裡那一大段 `kafka-cluster:*` 權限，也不需要 S3 讀取權限（plugin 內容在建立當下就被複製走了，不維持連結）
+- **實際權限只有兩塊**：CloudWatch Logs（範圍鎖定到專屬 log group）、Glue Schema Registry 查找與自動註冊（範圍鎖定到 `slice2-trade-events` registry）
+
+### 3. Connector 容量與叢集連線
+
+- **容量**：`provisioned_capacity`，1 個 worker、1 個 MCU——不用 autoscaling，因為 Debezium 這類關聯式來源 connector 天生只能單 task／單 replication slot，多 worker 用不到
+- **Kafka Connect 版本**：`3.7.x`（MSK Connect 目前只支援 `2.7.1` 或 `3.7.x`，已即時查證）
+- **連線設定對應既有 MSK cluster**：`bootstrap_servers` 用 `aws_msk_cluster.trade` 的 TLS 端點、VPC 用既有兩個私有子網 + `slice2_internal` SG（沒有新增 SG 規則，既有 self-referencing 規則已涵蓋）、認證 `NONE`、加密 `TLS`，皆對應 `msk.tf` 現有設定
+
+### 4. Debezium 擷取設定與資料流
+
+- **來源**：`io.debezium.connector.postgresql.PostgresConnector`，連到 `aws_db_instance.trade`，用 `pgoutput` 邏輯解碼外掛，只抓 `public.trade` 這張表
+- **Topic 改名**：Debezium 預設會產生 `transaction.public.trade`，用 `RegexRouter` SMT 改寫成 spec 承諾的 `transaction.trade.v1`
+- **序列化**：value 用 `AWSKafkaAvroConverter`（連到 `slice2-trade-events` registry，允許自動註冊新 schema——實測會註冊成一個獨立的 `transaction.trade.v1` schema，不會跟既有的 `trade_events` 撞名）；key 刻意用純字串 `StringConverter`，避免另外處理 key schema（非定案，2b 有需要再改）
+- **違約訊息**：`errors.tolerance=all` 搭配 DLQ 設定，送進 `transaction.trade.v1.dlq`，不阻塞主流程
+
+**對照表（原始碼出處）**
+
+| 主題 | 項目 | 資源 | 出處 |
+| --- | --- | --- | --- |
+| 合併版 Plugin 打包 | 下載與合併 | `null_resource.build_debezium_combined_plugin` | [msk_connector.tf:22-41](msk_connector.tf#L22-L41) |
+| 合併版 Plugin 打包 | 打包與註冊 | `aws_mskconnect_custom_plugin.debezium_combined` | [msk_connector.tf:43-67](msk_connector.tf#L43-L67) |
+| IAM 執行角色與權限 | Trust policy | `data.aws_iam_policy_document.msk_connect_trust` | [msk_connector.tf:74-97](msk_connector.tf#L74-L97) |
+| IAM 執行角色與權限 | 權限範圍 | `data.aws_iam_policy_document.msk_connect_permissions` | [msk_connector.tf:114-142](msk_connector.tf#L114-L142) |
+| Connector 容量與叢集連線 | 容量、版本 | `aws_mskconnect_connector.debezium_postgres`（`capacity`／`kafkaconnect_version`） | [msk_connector.tf:154-165](msk_connector.tf#L154-L165) |
+| Connector 容量與叢集連線 | 叢集連線 | `kafka_cluster`／`kafka_cluster_client_authentication`／`kafka_cluster_encryption_in_transit` | [msk_connector.tf:206-225](msk_connector.tf#L206-L225) |
+| Debezium 擷取設定與資料流 | 來源、Topic 改名、序列化、DLQ | `connector_configuration` | [msk_connector.tf:167-204](msk_connector.tf#L167-L204) |
+
+**對 Data Engineer 的意義**
+
+| 你會問 | 答案 |
+| --- | --- |
+| connector 現在真的在動嗎？ | 是。已用 `aws kafkaconnect describe-connector` 交叉驗證 `connectorState: RUNNING`，且 Glue Schema Registry 真的多了一個 `transaction.trade.v1` schema |
+| 我要怎麼查 connector 的執行紀錄？ | CloudWatch Logs，log group 名稱是部署後才決定的值，見 `outputs.tf` 的 `msk_connect_worker_log_group_name` |
+| 為什麼 key 不是 Avro？ | 判斷取捨，不是限制——目前用純字串省去處理 key schema 的複雜度，2b 若需要直接解析 key 結構再回頭改 |
+
+**⚠️ 注意 / 限制**
+
+- `msk_connect_plugin.tf` 那兩個獨立 plugin **不會**被這個 connector 使用，純粹保留作歷史 spike 證據，不要誤以為要一起維護
+- Trust policy 的 `SourceArn` 用萬用字元比對隨機 UUID 段，是 AWS 官方建議與 Terraform 建立順序限制之間的妥協，不是精確比對，決策記錄見 [ADR-0009](../../../docs/architecture/adr/0009-msk-connect-trust-policy-sourcearn-tradeoff.md)
 
 <a id="outputs-tf"></a>
 ## `outputs.tf` — 部署後才知道的值
 
-**總結**：把 18 個「寫程式碼時還不知道、apply 之後才產生」的值吐出來，供驗證與後續 slice 接手使用。
+**總結**：把 24 個「寫程式碼時還不知道、apply 之後才產生」的值吐出來，供驗證與後續 slice 接手使用。
 
 | 資源 | 白話說明 | 關鍵設定 | 出處 |
 | --- | --- | --- | --- |
@@ -356,7 +414,8 @@
 | 資料庫與運算（2 個） | `trade_db_endpoint`（RDS 連線位址）、`trade_generator_function_name` | endpoint 部署後才決定 | [outputs.tf:25-31](outputs.tf#L25-L31) |
 | Kafka（2 個） | `msk_cluster_arn`、`msk_bootstrap_brokers_tls` | **bootstrap 位址就是 producer／consumer 要連的地方**，部署後才決定 | [outputs.tf:33-39](outputs.tf#L33-L39) |
 | Schema Registry（3 個） | `glue_schema_registry_name`、`glue_schema_registry_arn`、`trade_events_schema_arn` | registry 名稱固定為 `slice2-trade-events`，ARN 部署後才決定 | [outputs.tf:41-51](outputs.tf#L41-L51) |
-| MSK Connect Plugin（5 個） | `msk_connect_plugin_bucket_name`、`debezium_postgres_plugin_arn`、`debezium_postgres_plugin_latest_revision`、`glue_schema_registry_converter_plugin_arn`、`glue_schema_registry_converter_plugin_latest_revision` | 兩個 plugin 的 ARN 與 revision，項目 7 建 connector 時直接要用 | [outputs.tf:53-71](outputs.tf#L53-L71) |
+| MSK Connect Plugin（歷史 spike，5 個） | `msk_connect_plugin_bucket_name`、`debezium_postgres_plugin_arn`、`debezium_postgres_plugin_latest_revision`、`glue_schema_registry_converter_plugin_arn`、`glue_schema_registry_converter_plugin_latest_revision` | 兩個 plugin 的 ARN 與 revision——未被真正的 connector 使用，見 `msk_connect_plugin.tf` 章節 | [outputs.tf:53-71](outputs.tf#L53-L71) |
+| MSK Connect Connector（6 個） | `msk_connector_arn`、`msk_connector_name`、`msk_connect_worker_log_group_name`、`debezium_combined_plugin_arn`、`debezium_combined_plugin_latest_revision`、`msk_connect_execution_role_arn` | 真正在跑的 connector／合併版 plugin／IAM Role，項目 8 驗證 CDC 事件時要用這些值 | [outputs.tf:73-95](outputs.tf#L73-L95) |
 
 **對 Data Engineer 的意義**
 

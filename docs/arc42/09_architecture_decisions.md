@@ -23,3 +23,4 @@
 | [ADR-0006](../architecture/adr/0006-msk-vs-kinesis.md) | 為何選 MSK 而非 Kinesis | ✅ `Accepted` |
 | [ADR-0007](../architecture/adr/0007-cdc-vs-batch-polling.md) | 為何用 CDC 而非定時撈整張表 | ✅ `Accepted` |
 | [ADR-0008](../architecture/adr/0008-lambda-vpc-access-gateway.md) | 私有子網路資源存取：以 Lambda 作為存取閘道，取代 Bastion/SSM | ✅ `Accepted` |
+| [ADR-0009](../architecture/adr/0009-msk-connect-trust-policy-sourcearn-tradeoff.md) | MSK Connect worker IAM trust policy 的 SourceArn 妥協方案 | ✅ `Accepted` |

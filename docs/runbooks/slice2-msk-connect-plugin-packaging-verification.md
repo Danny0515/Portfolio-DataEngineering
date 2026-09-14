@@ -10,6 +10,8 @@
 
 另外一個範圍決定：Debezium connector 與 AWS Glue Schema Registry Kafka Connect converter 拆成**兩個獨立的 custom plugin**，不合併成一個 zip——MSK Connect 的 `CreateConnector` API 本來就接受 plugin 清單，拆開能讓其中一個失敗時立刻孤立問題範圍，不必在合併後的單一 zip 裡大海撈針。
 
+> ⚠️ **修正（§4 項目 7 補充）**：上述「`CreateConnector` API 本來就接受 plugin 清單」的判斷經對照官方 API 文件證實錯誤——MSK Connect 目前不支援指定多個 plugin 的清單，一個 connector 只能引用恰好一個 custom plugin。這裡的兩個 plugin 因此**不會**被項目 7 真正的 connector 引用，只作為「各元件個別能打包成功」的歷史 spike 證據保留；項目 7 另外把兩者合併打包成第三個 custom plugin 供 connector 使用。
+
 ## 前置條件
 
 - 本機已有可重用的 AWS MFA session（`dt-lab-long-term-mfa`）
@@ -128,7 +130,9 @@ AWS_PROFILE=dt-lab-long-term-mfa aws kafkaconnect describe-custom-plugin \
 
 已解決：plugin 打包機制本身可行（Debezium 官方 `-plugin` tar.gz 與 Glue Schema Registry converter jar 都能直接包成 zip 用），Control Tower SCP 沒有限制 `kafkaconnect:CreateCustomPlugin` 這個 API 命名空間。
 
-留給項目 7：VPC 連線（MSK Connect worker 能否連到 MSK broker/RDS）、IAM 授權（connector 執行角色的最小權限設計，呼應 RULE-003）、兩個獨立打包的 plugin 掛到同一個 connector 上是否真的相容（classloader 層級沒有版本衝突）——這些都要等項目 7 真的建出 `aws_mskconnect_connector` 才會被驗證到。
+留給項目 7：VPC 連線（MSK Connect worker 能否連到 MSK broker/RDS）、IAM 授權（connector 執行角色的最小權限設計，呼應 RULE-003）——這些都要等項目 7 真的建出 `aws_mskconnect_connector` 才會被驗證到。
+
+> ⚠️ **修正（§4 項目 7 補充）**：原本規劃「兩個獨立打包的 plugin 掛到同一個 connector 上是否相容」這個驗證項目本身就基於錯誤前提——MSK Connect 一個 connector 只能引用一個 custom plugin，不存在「兩個 plugin 掛同一個 connector」這個情境。項目 7 改為把 Debezium 本體與 converter 合併打包成第三個 custom plugin，「合併後的 jar 在同一個 classloader 下是否相容」這個問題依然存在，只是驗證對象變成這個新的合併版 plugin，細節見 `infra/environments/dev-slice2/msk_connector.tf`。
 
 ## 相關文件
 

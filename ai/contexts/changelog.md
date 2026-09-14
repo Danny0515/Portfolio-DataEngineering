@@ -559,3 +559,30 @@
 
 > 這次 apply 全程零失敗——打包格式、S3 上傳、MSK Connect 註冊三個關鍵假設一次就對，跟項目 6 本身「先花大量時間即時查證再動手」的節奏直接相關：實作前用 WebFetch/curl 逐一驗證了 `kafka_version` 格式、Debezium tar.gz 實際解壓結構、converter jar 是否為自帶依賴的 uber jar，把不確定性壓在動手前而不是動手後才發現，跟項目 5 MSK cluster 佈建（28 分鐘、但期間沒有需要排查的意外）是同一種工作方式的延續。
 
+## Session 021 — 2026-09-14
+
+- **Engineer**: Danny
+- **Role**: Data Engineer
+- **LLM Used**: Claude Code (claude-sonnet-5)
+- **Module**: slice2a-cdc-ingestion
+
+### Completed
+
+- [x] (承接 Session 020 Next Step)完成 §4 項目 7（CDC connector 部署）：新增 `infra/environments/dev-slice2/msk_connector.tf`，合併打包 Debezium 本體與 Glue Schema Registry converter 成第三個 custom plugin（項目 6 的兩個獨立 plugin 無法被真正的 connector 引用——查證 AWS 官方 `CreateConnector` API 文件才發現一個 connector 只能掛一個 plugin，項目 6 當時的假設是錯的），建立專屬 IAM Role（trust policy 用 `SourceAccount` 精確比對 + `SourceArn` 萬用字元比對 connector 名稱的妥協方案）與 `aws_mskconnect_connector`；`terraform apply` 一次就成功，`connectorState` 為 `RUNNING`，Glue Schema Registry 也確實自動註冊了 `transaction.trade.v1` schema，皆用唯讀 CLI 交叉驗證
+- [x] 依 RULE-003 為 IAM trust policy 的妥協方案新增 [ADR-0009](../../docs/architecture/adr/0009-msk-connect-trust-policy-sourcearn-tradeoff.md)，同步更新 `docs/arc42/09_architecture_decisions.md` 決策總表
+- [x] 新增 [docs/patterns/msk-connect-single-plugin-per-connector.md](../../docs/patterns/msk-connect-single-plugin-per-connector.md)，記錄 MSK Connect 一個 connector 只能掛一個 plugin 的限制，並定義未來擴充模式（等真的出現第二個 connector，才把打包邏輯抽成 Terraform module）
+- [x] 回頭修正 `msk_connect_plugin.tf` 標頭與對應 runbook 裡「CreateConnector 接受 plugin 清單」的錯誤假設說明；用 `/explain-infra` 更新 `dev-slice2` 環境的 `README.md`（新增 `msk_connector.tf` 章節、修正 `msk_connect_plugin.tf` 章節標註「歷史 spike，未被使用」、`outputs.tf` 章節更新為 24 個 output）
+
+### Related ADRs
+
+- 新增 [ADR-0009](../../docs/architecture/adr/0009-msk-connect-trust-policy-sourcearn-tradeoff.md)：MSK Connect worker IAM trust policy 的 SourceArn 妥協方案
+
+### Next Steps
+
+- [ ] 依 `docs/specs/slice2a-cdc-ingestion.md` §4 實作項目清單繼續：項目 8（CDC 事件驗證）
+- [ ] 檢查 `docs/TODO.md`「把 Pattern 封裝成 Skill」項目：目前已累積 3 張 Pattern Card（WAP Gate、Lambda VPC Gateway、MSK Connect 單一 Plugin），評估是否達到「大量複現」門檻，該不該開始實作對應 skill
+
+### Notes
+
+> 項目 6「CreateConnector 接受 plugin 清單」的錯誤假設是本次唯一的技術判斷失誤，但因為項目 6 有留下完整的 spike 紀錄與（這次新增的）Pattern Card，項目 7 發現問題時能立刻定位原因、重新設計，而不必從頭排查；即使問題本身很小，仍然額外沉澱成一張 Pattern Card 而不是只改 code，是為了讓下一個 MSK Connect connector（不管是誰、什麼時候加）不會重蹈覆轍。`docs/concepts/` 這次也新增了 Kafka Connect 相關學習筆記與命名規則，性質是輔助性的學習筆記，併入同一筆 commit、不在此另外展開。
+

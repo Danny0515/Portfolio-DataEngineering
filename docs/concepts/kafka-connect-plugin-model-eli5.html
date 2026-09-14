@@ -1,0 +1,452 @@
+<title>貨運工與翻譯員</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --bg: #0E2A4A;
+    --bg-panel: #123356;
+    --bg-panel-2: #0F2E52;
+    --line: #E7F1FF;
+    --line-dim: #8FB0CE;
+    --rule: rgba(231, 241, 255, 0.16);
+    --accent: #FFB627;
+    --accent-ink: #2A1B00;
+    --accent-2: #5EEAD4;
+    --danger: #FF9B8F;
+    --danger-bg: rgba(255, 107, 90, 0.14);
+    --shadow: rgba(2, 10, 22, 0.45);
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #F3F6FA;
+      --bg-panel: #FFFFFF;
+      --bg-panel-2: #EAF1F8;
+      --line: #0E2A4A;
+      --line-dim: #5B7A9C;
+      --rule: rgba(14, 42, 74, 0.16);
+      --accent: #B8720A;
+      --accent-ink: #FFF6E6;
+      --accent-2: #0E8E82;
+      --danger: #C23B2F;
+      --danger-bg: rgba(194, 59, 47, 0.08);
+      --shadow: rgba(14, 42, 74, 0.12);
+    }
+  }
+
+  :root[data-theme="light"] {
+    --bg: #F3F6FA;
+    --bg-panel: #FFFFFF;
+    --bg-panel-2: #EAF1F8;
+    --line: #0E2A4A;
+    --line-dim: #5B7A9C;
+    --rule: rgba(14, 42, 74, 0.16);
+    --accent: #B8720A;
+    --accent-ink: #FFF6E6;
+    --accent-2: #0E8E82;
+    --danger: #C23B2F;
+    --danger-bg: rgba(194, 59, 47, 0.08);
+    --shadow: rgba(14, 42, 74, 0.12);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--line);
+    font-family: "Public Sans", -apple-system, "Noto Sans TC", "PingFang TC", sans-serif;
+    background-image:
+      linear-gradient(var(--rule) 1px, transparent 1px),
+      linear-gradient(90deg, var(--rule) 1px, transparent 1px);
+    background-size: 28px 28px;
+    line-height: 1.7;
+  }
+
+  .page {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 4rem 1.25rem 6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 3.5rem;
+  }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.78rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent-2);
+    margin: 0 0 0.6rem;
+  }
+
+  h1, h2 {
+    font-family: "Big Shoulders Display", "Noto Sans TC", sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    text-wrap: balance;
+    letter-spacing: 0.01em;
+    margin: 0;
+    color: var(--line);
+  }
+
+  h1 { font-size: clamp(2.4rem, 7vw, 3.6rem); line-height: 0.98; }
+  h2 { font-size: clamp(1.5rem, 4.4vw, 2.05rem); line-height: 1.05; }
+
+  p { margin: 0; max-width: 62ch; }
+  .lede { font-size: 1.05rem; color: var(--line-dim); max-width: 52ch; }
+
+  .hero {
+    display: flex;
+    flex-direction: column;
+    gap: 1.4rem;
+  }
+
+  .hero-note {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.82rem;
+    color: var(--line-dim);
+    border-top: 1px solid var(--rule);
+    padding-top: 0.9rem;
+  }
+
+  .sheet {
+    position: relative;
+    background: var(--bg-panel);
+    border: 1px solid var(--rule);
+    padding: 2rem clamp(1.2rem, 4vw, 2.4rem) 2.2rem;
+    box-shadow: 0 18px 40px var(--shadow);
+    opacity: 0;
+    transform: translateY(18px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  .sheet.in-view { opacity: 1; transform: translateY(0); }
+  @media (prefers-reduced-motion: reduce) {
+    .sheet { opacity: 1; transform: none; transition: none; }
+  }
+
+  .sheet::before, .sheet::after {
+    content: "";
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border-color: var(--line-dim);
+    opacity: 0.55;
+  }
+  .sheet::before { top: -1px; left: -1px; border-top: 2px solid; border-left: 2px solid; }
+  .sheet::after { top: -1px; right: -1px; border-top: 2px solid; border-right: 2px solid; }
+
+  .sheet-tag {
+    position: absolute;
+    top: -0.7rem;
+    left: clamp(1.2rem, 4vw, 2.4rem);
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    padding: 0.2rem 0.55rem;
+  }
+
+  .sheet-tag.danger { background: var(--danger); color: var(--accent-ink); }
+
+  .sheet-head {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    margin-bottom: 1.4rem;
+  }
+
+  .sheet-body { color: var(--line-dim); }
+  .sheet-body strong { color: var(--line); font-weight: 600; }
+  .sheet-body code {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.88em;
+    color: var(--accent-2);
+    background: var(--bg-panel-2);
+    padding: 0.05em 0.35em;
+  }
+
+  figure { margin: 1.4rem 0 0; }
+  .diagram-wrap {
+    overflow-x: auto;
+    background: var(--bg-panel-2);
+    border: 1px solid var(--rule);
+  }
+  svg.diagram { display: block; width: 100%; height: auto; }
+  figcaption {
+    margin-top: 0.6rem;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.78rem;
+    color: var(--line-dim);
+  }
+
+  .svg-label { font-family: "Public Sans", sans-serif; font-size: 12px; fill: currentColor; }
+  .svg-mono { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; fill: currentColor; }
+  .svg-title { font-family: "Big Shoulders Display", sans-serif; font-weight: 700; }
+
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.2rem;
+  }
+  @media (min-width: 640px) {
+    .compare { grid-template-columns: 1fr 1fr; }
+  }
+  .compare-col h3 {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    margin: 0 0 0.5rem;
+    color: var(--line);
+  }
+
+  .badge-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    margin-top: 1.2rem;
+  }
+  .badge-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.7rem;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.85rem;
+    padding: 0.55rem 0.8rem;
+    background: var(--bg-panel-2);
+    border: 1px solid var(--rule);
+  }
+  .badge-row .tag { color: var(--accent-2); flex-shrink: 0; }
+  .badge-row .desc { color: var(--line-dim); font-family: "Public Sans", sans-serif; }
+
+  .status-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.9rem;
+    margin-top: 1.4rem;
+    align-items: center;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.82rem;
+    padding: 0.45rem 0.75rem;
+    border: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+  .chip.done { border-color: color-mix(in srgb, var(--accent-2) 55%, transparent); color: var(--accent-2); }
+  .chip.bad { border-color: color-mix(in srgb, var(--danger) 55%, transparent); color: var(--danger); }
+  .chip.next { color: var(--line-dim); }
+  .status-arrow { color: var(--line-dim); font-family: "IBM Plex Mono", monospace; }
+
+  footer.colophon {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.78rem;
+    color: var(--line-dim);
+    border-top: 1px solid var(--rule);
+    padding-top: 1.2rem;
+  }
+</style>
+
+<div class="page">
+
+  <section class="hero">
+    <p class="eyebrow">Kafka Connect · 新手圖解</p>
+    <h1>貨運工與<br>翻譯員</h1>
+    <p class="lede">項目 6 以為訂了兩個箱子就能一起用，項目 7 動手組裝時才發現：規矩不是這樣訂的。</p>
+
+    <figure>
+      <div class="diagram-wrap">
+        <svg class="diagram" viewBox="0 0 640 200" role="img" aria-label="以為：兩個獨立箱子可以一起掛上貨車；實際：貨車只收一個已經封好的箱子">
+          <text x="20" y="34" class="svg-label" opacity="0.6">以為（項目 6）</text>
+          <rect x="20" y="50" width="120" height="100" fill="var(--bg-panel-2)" stroke="var(--accent-2)" stroke-width="1.5" stroke-dasharray="4 3"/>
+          <text x="34" y="90" class="svg-mono" fill="var(--accent-2)">箱子 A</text>
+          <text x="34" y="106" class="svg-mono" opacity="0.6">Debezium</text>
+          <rect x="160" y="50" width="120" height="100" fill="var(--bg-panel-2)" stroke="var(--accent-2)" stroke-width="1.5" stroke-dasharray="4 3"/>
+          <text x="174" y="90" class="svg-mono" fill="var(--accent-2)">箱子 B</text>
+          <text x="174" y="106" class="svg-mono" opacity="0.6">Glue SR</text>
+          <text x="90" y="176" class="svg-mono" opacity="0.5">兩個箱子一起交給貨車？</text>
+
+          <line x1="300" y1="100" x2="340" y2="100" stroke="currentColor" stroke-width="1.4" marker-end="url(#h1)"/>
+
+          <rect x="346" y="20" width="274" height="160" fill="var(--bg)" stroke="var(--danger)" stroke-width="2.5"/>
+          <text x="360" y="44" class="svg-label" fill="var(--danger)">實際（貨車的規矩）</text>
+          <rect x="372" y="66" width="220" height="90" fill="var(--bg-panel-2)" stroke="var(--accent)" stroke-width="2"/>
+          <text x="386" y="98" class="svg-label" fill="var(--accent)">只收「一個」封好的箱子</text>
+          <text x="386" y="118" class="svg-mono" opacity="0.6">要兩樣東西？先自己封成一箱</text>
+          <text x="386" y="136" class="svg-mono" opacity="0.5">項目 7 才補這一步</text>
+
+          <defs>
+            <marker id="h1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+        </svg>
+      </div>
+      <figcaption>官方文件寫得很清楚，只是項目 6 當時沒查到；項目 7 建 connector 才真的撞上。</figcaption>
+    </figure>
+  </section>
+
+  <section class="sheet">
+    <span class="sheet-tag">SHEET 01 · 兩個不同的工人</span>
+    <div class="sheet-head">
+      <h2>貨運工不管語言，翻譯員不管搬運</h2>
+      <p class="sheet-body">Kafka Connect 裡有兩種完全不同的工作，刻意設計成互不相關：<strong>貨運工（Connector）</strong>負責「東西怎麼搬」——去哪裡搬、搬到哪裡去；<strong>翻譯員（Converter）</strong>負責「東西怎麼寫」——用什麼格式描述這批貨。貨運工不在乎貨單用哪種語言寫，翻譯員也不在乎貨物從哪裡搬來。</p>
+    </div>
+    <figure>
+      <div class="diagram-wrap">
+        <svg class="diagram" viewBox="0 0 640 220" role="img" aria-label="貨運工（不同來源）跟翻譯員（不同格式）是兩個獨立的軸，理論上可以任意配對">
+          <text x="20" y="30" class="svg-label" opacity="0.7">貨運工（搬什麼、從哪搬）</text>
+          <rect x="20" y="46" width="160" height="34" fill="var(--bg-panel-2)" stroke="var(--accent-2)" stroke-width="1.4"/>
+          <text x="34" y="68" class="svg-mono" fill="var(--accent-2)">Debezium（RDS）</text>
+          <rect x="20" y="88" width="160" height="34" fill="var(--bg-panel-2)" stroke="var(--accent-2)" stroke-width="1.4"/>
+          <text x="34" y="110" class="svg-mono" fill="var(--accent-2)">S3 Sink</text>
+          <rect x="20" y="130" width="160" height="34" fill="var(--bg-panel-2)" stroke="var(--accent-2)" stroke-width="1.4" opacity="0.6"/>
+          <text x="34" y="152" class="svg-mono" opacity="0.7">JDBC Sink…</text>
+
+          <text x="420" y="30" class="svg-label" opacity="0.7">翻譯員（用什麼格式寫）</text>
+          <rect x="420" y="46" width="180" height="34" fill="var(--bg-panel-2)" stroke="var(--accent)" stroke-width="1.4"/>
+          <text x="434" y="68" class="svg-mono" fill="var(--accent)">Avro + Glue SR</text>
+          <rect x="420" y="88" width="180" height="34" fill="var(--bg-panel-2)" stroke="var(--accent)" stroke-width="1.4" opacity="0.6"/>
+          <text x="434" y="110" class="svg-mono" opacity="0.7">JSON</text>
+          <rect x="420" y="130" width="180" height="34" fill="var(--bg-panel-2)" stroke="var(--accent)" stroke-width="1.4" opacity="0.6"/>
+          <text x="434" y="152" class="svg-mono" opacity="0.7">純字串…</text>
+
+          <line x1="100" y1="63" x2="510" y2="63" stroke="currentColor" stroke-width="1" stroke-dasharray="2 4" opacity="0.35"/>
+          <line x1="100" y1="105" x2="510" y2="63" stroke="currentColor" stroke-width="1" stroke-dasharray="2 4" opacity="0.25"/>
+          <line x1="100" y1="63" x2="510" y2="105" stroke="currentColor" stroke-width="1" stroke-dasharray="2 4" opacity="0.25"/>
+          <text x="230" y="196" class="svg-mono" opacity="0.5">任何一列 × 任何一欄，理論上都是合法組合</text>
+        </svg>
+      </div>
+      <figcaption>本次用的組合：Debezium（貨運工）× AWSKafkaAvroConverter（翻譯員）。以後加新來源或新格式，排列組合只會更多。</figcaption>
+    </figure>
+  </section>
+
+  <section class="sheet">
+    <span class="sheet-tag">SHEET 02 · 兩種倉庫規矩</span>
+    <div class="sheet-head">
+      <h2>自己開倉庫 vs 用代管倉庫</h2>
+      <p class="sheet-body">Kafka Connect 這個系統本身，允許把所有貨運工、翻譯員都放在同一個倉庫架上（<code>plugin.path</code>），要派工時現場自由配對——這是框架原生就有的彈性。但 <strong>MSK Connect</strong>（AWS 代管版）換了規矩：不開放你去架上自己拿，每一趟貨都得先把要用的貨運工跟翻譯員封裝成「一箱」，整箱交給它。</p>
+    </div>
+    <div class="compare">
+      <div class="compare-col">
+        <h3>自架倉庫（plugin.path）</h3>
+        <div class="diagram-wrap">
+          <svg class="diagram" viewBox="0 0 300 180" role="img" aria-label="自架倉庫：架上放各種獨立工人，派工時現場自由配對">
+            <rect x="20" y="20" width="260" height="70" fill="var(--bg-panel-2)" stroke="var(--accent-2)" stroke-width="1.3" opacity="0.7"/>
+            <text x="32" y="40" class="svg-mono" opacity="0.6">架上（各自獨立）</text>
+            <text x="32" y="58" class="svg-mono" opacity="0.55">貨運工 A／B／C</text>
+            <text x="32" y="74" class="svg-mono" opacity="0.55">翻譯員 X／Y</text>
+            <line x1="150" y1="90" x2="150" y2="120" stroke="currentColor" stroke-width="1.4" marker-end="url(#h3)"/>
+            <text x="60" y="150" class="svg-mono" opacity="0.6">現場配：A 配 X、B 配 Y…</text>
+            <defs>
+              <marker id="h3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+              </marker>
+            </defs>
+          </svg>
+        </div>
+      </div>
+      <div class="compare-col">
+        <h3>MSK Connect（本專案採用）</h3>
+        <div class="diagram-wrap">
+          <svg class="diagram" viewBox="0 0 300 180" role="img" aria-label="MSK Connect：先把要用的工人封成一箱，交出去的必須是一個完整的箱子">
+            <rect x="60" y="20" width="90" height="40" fill="var(--bg-panel-2)" stroke="var(--accent-2)" stroke-width="1.3" opacity="0.6"/>
+            <text x="72" y="44" class="svg-mono" opacity="0.6">貨運工</text>
+            <rect x="160" y="20" width="90" height="40" fill="var(--bg-panel-2)" stroke="var(--accent)" stroke-width="1.3" opacity="0.6"/>
+            <text x="172" y="44" class="svg-mono" opacity="0.6">翻譯員</text>
+            <line x1="105" y1="60" x2="140" y2="95" stroke="currentColor" stroke-width="1.2" opacity="0.5"/>
+            <line x1="205" y1="60" x2="160" y2="95" stroke="currentColor" stroke-width="1.2" opacity="0.5"/>
+            <rect x="90" y="100" width="120" height="55" fill="var(--bg)" stroke="var(--accent)" stroke-width="2"/>
+            <text x="104" y="124" class="svg-label" fill="var(--accent)">封好的一箱</text>
+            <text x="104" y="142" class="svg-mono" opacity="0.6">custom plugin</text>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <span class="sheet-tag danger">SHEET 03 · 這次真的踩到</span>
+    <div class="sheet-head">
+      <h2>先訂了兩箱，貨車只收一箱</h2>
+      <p class="sheet-body">項目 6 只需要驗證「箱子訂得出來」，所以分開訂了兩個獨立的小箱子——各自都順利驗收。項目 7 真的要叫貨車（<code>aws_mskconnect_connector</code>）來載的時候才發現：貨車的表單（<code>CreateConnector</code> API）上，「箱子」欄位只能填一個。兩個小箱子不能一起遞出去，得先拆開重新封成一箱。</p>
+    </div>
+    <div class="status-row">
+      <span class="chip done">✓ 項目 6：兩箱各自訂成 ACTIVE</span>
+      <span class="status-arrow">→</span>
+      <span class="chip bad">✗ 項目 7：貨車不收兩箱</span>
+      <span class="status-arrow">→</span>
+      <span class="chip done">✓ 重新封成合併版一箱，貨車收下、RUNNING</span>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <span class="sheet-tag">SHEET 04 · 以後怎麼辦</span>
+    <div class="sheet-head">
+      <h2>零件先分開放，需要時再組</h2>
+      <p class="sheet-body">現在只有一趟貨（一個 connector），手動封一箱沒問題。但以後貨運工、翻譯員的組合只會越來越多——業界的做法是把每個零件（每種貨運工、每種翻譯員）分開存放在同一個「零件庫」（S3），每次有新的一趟貨，用同一套「打包站」流程（Terraform）依這趟貨實際需要的零件現場組裝、封箱、送出去，而不是每趟貨都重寫一次打包邏輯。</p>
+    </div>
+    <figure>
+      <div class="diagram-wrap">
+        <svg class="diagram" viewBox="0 0 640 200" role="img" aria-label="S3 零件庫存放獨立零件，Terraform 打包站依需求組裝成對應 connector 要用的箱子">
+          <text x="20" y="30" class="svg-label" opacity="0.7">零件庫（S3）</text>
+          <rect x="20" y="46" width="140" height="30" fill="var(--bg-panel-2)" stroke="var(--accent-2)" stroke-width="1.3"/>
+          <text x="30" y="66" class="svg-mono" opacity="0.7">Debezium jar</text>
+          <rect x="20" y="84" width="140" height="30" fill="var(--bg-panel-2)" stroke="var(--accent-2)" stroke-width="1.3"/>
+          <text x="30" y="104" class="svg-mono" opacity="0.7">Glue SR jar</text>
+          <rect x="20" y="122" width="140" height="30" fill="var(--bg-panel-2)" stroke="var(--accent-2)" stroke-width="1.3" opacity="0.6"/>
+          <text x="30" y="142" class="svg-mono" opacity="0.6">S3 Sink jar…</text>
+
+          <line x1="170" y1="90" x2="230" y2="90" stroke="currentColor" stroke-width="1.4" marker-end="url(#h4)"/>
+          <rect x="236" y="50" width="150" height="80" fill="var(--bg)" stroke="var(--accent)" stroke-width="2"/>
+          <text x="250" y="74" class="svg-label" fill="var(--accent)">打包站</text>
+          <text x="250" y="92" class="svg-mono" opacity="0.6">Terraform module</text>
+          <text x="250" y="108" class="svg-mono" opacity="0.5">依清單現場組裝</text>
+
+          <line x1="386" y1="90" x2="440" y2="90" stroke="var(--accent-2)" stroke-width="1.6" marker-end="url(#h4)"/>
+          <rect x="446" y="60" width="170" height="60" fill="var(--bg-panel-2)" stroke="var(--accent-2)" stroke-width="1.6"/>
+          <text x="460" y="86" class="svg-mono" fill="var(--accent-2)">交給下一個</text>
+          <text x="460" y="104" class="svg-mono" fill="var(--accent-2)">新 connector</text>
+
+          <defs>
+            <marker id="h4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+        </svg>
+      </div>
+      <figcaption>現在只有一個 connector，先不做這層抽象；等真的出現第二個 connector，才是把打包邏輯抽成 module 的時機。</figcaption>
+    </figure>
+  </section>
+
+  <footer class="colophon">
+    對照 docs/specs/slice2a-cdc-ingestion.md §4 項目 6／7 · infra/environments/dev-slice2/{msk_connect_plugin,msk_connector}.tf · docs/patterns/msk-connect-single-plugin-per-connector.md · 同系列：aws-network-eli5.html、terraform-account-vs-state-eli5.html、rds-lambda-eli5.html
+  </footer>
+
+</div>
+
+<script>
+  (function () {
+    var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var sheets = document.querySelectorAll('.sheet');
+    if (reduceMotion || !('IntersectionObserver' in window)) {
+      sheets.forEach(function (s) { s.classList.add('in-view'); });
+      return;
+    }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('in-view');
+          io.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.15, rootMargin: '0px 0px -60px 0px' });
+    sheets.forEach(function (s) { io.observe(s); });
+  })();
+</script>

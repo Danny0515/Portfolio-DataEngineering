@@ -8,6 +8,14 @@
 # 拆成兩個獨立 custom plugin（Debezium connector 本體 + Glue Schema Registry
 # converter），不合併成一個 zip：CreateConnector API 本來就接受 plugin 清單；分開打包
 # 讓其中一個 CREATE_FAILED 時能立刻孤立問題範圍，不必在合併後的單一 zip 裡大海撈針。
+#
+# ⚠️ 修正（§4 項目 7 補充）：上面「CreateConnector API 本來就接受 plugin 清單」的
+# 說法經對照官方 API 文件（API_CreateConnector.html）證實錯誤——文件明載 MSK
+# Connect 目前不支援指定多個 plugin 的清單，`plugins` 必須是恰好一個元素的清單；
+# 要用多個 plugin，必須把它們打包進同一個 zip 建立單一 custom plugin。這裡的兩個
+# plugin 因此不會被真正的 connector 引用，只作為「各元件個別能打包成功」的歷史
+# spike 證據保留；項目 7 在 msk_connector.tf 另建第三個合併 plugin 供 connector
+# 實際使用。
 
 locals {
   debezium_connector_postgres_version      = "3.1.1.Final"

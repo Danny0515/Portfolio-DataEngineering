@@ -69,3 +69,27 @@ output "glue_schema_registry_converter_plugin_arn" {
 output "glue_schema_registry_converter_plugin_latest_revision" {
   value = aws_mskconnect_custom_plugin.glue_schema_registry_converter.latest_revision
 }
+
+output "msk_connector_arn" {
+  value = aws_mskconnect_connector.debezium_postgres.arn
+}
+
+output "msk_connector_name" {
+  value = aws_mskconnect_connector.debezium_postgres.name
+}
+
+output "msk_connect_worker_log_group_name" {
+  value = aws_cloudwatch_log_group.msk_connect_debezium.name
+}
+
+output "debezium_combined_plugin_arn" {
+  value = aws_mskconnect_custom_plugin.debezium_combined.arn
+}
+
+output "debezium_combined_plugin_latest_revision" {
+  value = aws_mskconnect_custom_plugin.debezium_combined.latest_revision
+}
+
+output "msk_connect_execution_role_arn" {
+  value = aws_iam_role.msk_connect_debezium.arn
+}
