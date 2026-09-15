@@ -93,3 +93,7 @@ output "debezium_combined_plugin_latest_revision" {
 output "msk_connect_execution_role_arn" {
   value = aws_iam_role.msk_connect_debezium.arn
 }
+
+output "cdc_event_verifier_function_name" {
+  value = aws_lambda_function.cdc_event_verifier.function_name
+}

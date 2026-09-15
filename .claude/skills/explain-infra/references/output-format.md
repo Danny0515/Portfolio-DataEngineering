@@ -140,6 +140,7 @@
 | `schema_registry.tf` | 1. Schema 格式與欄位定義　2. 相容性策略與治理規則 |
 | `msk_connect_plugin.tf` | 1. 打包來源與內容　2. 儲存與 MSK Connect 註冊　3. 範圍界線與生命週期 |
 | `msk_connector.tf` | 1. 合併版 Plugin 打包　2. IAM 執行角色與權限　3. Connector 容量與叢集連線　4. Debezium 擷取設定與資料流 |
+| `msk_event_verifier.tf` | 1. 打包與部署　2. IAM 唯讀權限　3. Consumer 邏輯與重用設計 |
 
 主題數量**允許依服務不同**（2–4 個），不強迫每個服務都湊滿一樣的格數——`schema_registry.tf` 沒有「硬體規格」可講，硬湊會變成空話。每個服務的主題清單一旦定案就固定，同一個檔案每次重新轉譯，區塊標題不應該變來變去。
 

@@ -133,8 +133,8 @@
 | 4 | 來源 OLTP DB | 依 §3.1 建立 RDS 與 parameter group（logical replication）、初始 schema | [`rds.tf`](../../infra/environments/dev-slice2/rds.tf) + [建表 DDL](../../src/ingestion/sql/create_trade_table.sql) | ✅ |
 | 5 | MSK + Schema Registry | 依 §3.3 建立 cluster、topic（`transaction.trade.v1` + DLQ）、Glue Schema Registry 與相容性模式（§3.4） | `msk.tf` / `schema_registry.tf` | ✅ |
 | 6 | Debezium plugin 打包 spike | 依 §3.2，獨立驗證 plugin zip 打包 → S3 → custom plugin 這條路徑（比照 Slice 1 GX 依賴打包的先 spike 後主線慣例） | [slice2-msk-connect-plugin-packaging-verification.md](../runbooks/slice2-msk-connect-plugin-packaging-verification.md) | ✅ |
-| 7 | CDC connector 部署 | connector 設定（來源連線、topic 命名、Avro converter、DLQ）與 IAM/VPC 授權 | 運作中的 connector | ⬜ |
-| 8 | CDC 事件驗證 | 來源 DB 的 insert / update / delete 三種操作都出現在 topic，且帶 before/after 與來源變更序（LSN） | 驗證紀錄 | ⬜ |
+| 7 | CDC connector 部署 | connector 設定（來源連線、topic 命名、Avro converter、DLQ）與 IAM/VPC 授權 | 運作中的 connector | ✅ |
+| 8 | CDC 事件驗證 | 來源 DB 的 insert / update / delete 三種操作都出現在 topic，且帶 before/after 與來源變更序（LSN） | [slice2-cdc-event-verification.md](../runbooks/slice2-cdc-event-verification.md) | ✅ |
 | 9 | Schema 破壞性變更驗證 | 註冊一個違反相容性規則的新版 schema（如新增沒有 default 值的必填欄位），確認被 Registry 擋下；違約訊息進 DLQ 而非阻塞主流程 | 驗證紀錄 | ⬜ |
 | 10 | 資源啟停 runbook | 依 §3.3(b) 記錄建立/銷毀順序與成本注意事項（2b 沿用同一份） | `docs/runbooks/slice2-stack-lifecycle.md` | ⬜ |
 | 11 | Data Contract 第一版 | `trade_events` model：Avro schema、品質規則、違約行為（DLQ）。**SLA（`servicelevels`）留待 2b 實測後補** | `contracts/trade-events.contract.yaml` | ⬜ |

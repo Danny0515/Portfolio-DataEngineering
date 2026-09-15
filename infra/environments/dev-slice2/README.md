@@ -4,14 +4,14 @@
 >
 > 這是「原始碼意圖」的轉譯，不是部署現況——實際 resource ID／endpoint／密碼等 apply 後才產生的值，見 [ai/contexts/infra_dev_slice2.md](../../../ai/contexts/infra_dev_slice2.md)。
 
-**最後轉譯**：2026-09-14
-**來源**：`infra/environments/dev-slice2/*.tf`（11 個檔案）
+**最後轉譯**：2026-09-15
+**來源**：`infra/environments/dev-slice2/*.tf`（12 個檔案）
 
 ## 這個環境在做什麼
 
 這是 Slice 2 CDC 管線的來源端。一台 PostgreSQL 當作交易系統的 OLTP 資料庫，一支 Lambda 定期往裡面塞模擬的交易資料（新增／更新／刪除都有，才有 CDC 可以擷取），旁邊架一組 Kafka（MSK）等著接 CDC 訊息，另外在 Glue Schema Registry 註冊了交易事件的 Avro schema 來管控欄位變更。
 
-再往下一步，Debezium PostgreSQL connector 跟 AWS Glue Schema Registry 的 Kafka Connect converter 已經合併打包成 MSK Connect 看得懂的格式，正式建成一個 connector 掛上去跑——RDS 的異動現在會即時被擷取，經 `RegexRouter` 改名、`AWSKafkaAvroConverter` 序列化後送進 `transaction.trade.v1` 這個 Kafka topic，已用唯讀 CLI 交叉驗證為 `RUNNING`。
+再往下一步，Debezium PostgreSQL connector 跟 AWS Glue Schema Registry 的 Kafka Connect converter 已經合併打包成 MSK Connect 看得懂的格式，正式建成一個 connector 掛上去跑——RDS 的異動現在會即時被擷取，經 `RegexRouter` 改名、`AWSKafkaAvroConverter` 序列化後送進 `transaction.trade.v1` 這個 Kafka topic，已用唯讀 CLI 交叉驗證為 `RUNNING`。另外一支消費驗證用的 Lambda 已經實測解碼過真實的 CDC 事件，insert/update/delete 與完整的交易生命週期都拿到了真實的 before/after 影像與 LSN 佐證。
 
 整組資源關在一個沒有對外通道的私有 VPC 裡——沒有 Internet Gateway 也沒有 NAT，要連 AWS 服務只能走 VPC Endpoint。這也是為什麼資料 generator 做成 Lambda 而不是本機腳本：你的筆電沒有任何路徑可以直接連進去。
 
@@ -30,6 +30,7 @@
 - [`schema_registry.tf` — 交易事件 Schema 治理](#schema_registry-tf)
 - [`msk_connect_plugin.tf` — Debezium plugin 打包（歷史 spike，未被使用）](#msk_connect_plugin-tf)
 - [`msk_connector.tf` — CDC connector 部署](#msk_connector-tf)
+- [`msk_event_verifier.tf` — CDC 事件驗證](#msk_event_verifier-tf)
 - [`outputs.tf` — 部署後才知道的值](#outputs-tf)
 
 ## 檔案總覽與相依關係
@@ -46,6 +47,7 @@
 | `schema_registry.tf` | 交易事件的 Avro schema 與相容性規則 | — | `msk_connector.tf` |
 | `msk_connect_plugin.tf` | 把 Debezium／Glue SR converter 打包成 MSK Connect plugin（歷史 spike，未被使用） | — | `msk_connector.tf`（共用 S3 bucket） |
 | `msk_connector.tf` | 合併打包真正會用的 plugin，建 IAM Role 與 CDC connector 本體 | `vpc.tf`、`rds.tf`、`msk.tf`、`schema_registry.tf`、`msk_connect_plugin.tf` | — |
+| `msk_event_verifier.tf` | 消費並解碼 `transaction.trade.v1`，驗證 CDC 事件內容 | `vpc.tf`、`msk.tf`、`schema_registry.tf` | — |
 | `outputs.tf` | 把部署後才知道的值（ID／endpoint）吐出來 | 全部 | — |
 
 <a id="versions-tf"></a>
@@ -403,10 +405,53 @@
 - `msk_connect_plugin.tf` 那兩個獨立 plugin **不會**被這個 connector 使用，純粹保留作歷史 spike 證據，不要誤以為要一起維護
 - Trust policy 的 `SourceArn` 用萬用字元比對隨機 UUID 段，是 AWS 官方建議與 Terraform 建立順序限制之間的妥協，不是精確比對，決策記錄見 [ADR-0009](../../../docs/architecture/adr/0009-msk-connect-trust-policy-sourcearn-tradeoff.md)
 
+<a id="msk_event_verifier-tf"></a>
+## `msk_event_verifier.tf` — CDC 事件驗證
+
+**總結**：一支消費用的 Lambda，連到 `transaction.trade.v1` 把訊息抓下來解碼，驗證 insert/update/delete 真的會產生帶 before/after 影像跟 LSN 的 CDC 事件——已用真實資料驗證通過，細節見 [runbook](../../../docs/runbooks/slice2-cdc-event-verification.md)。
+
+### 1. 打包與部署
+
+- **相依套件**：`kafka-python-ng`（`kafka-python` 停更後的維護分支）+ `aws-glue-schema-registry`（負責解析 Glue Schema Registry 的訊息 header、換回實際 schema）
+- **踩到的坑**：`aws-glue-schema-registry` 間接依賴 `orjson`——一個用 Rust 編譯的 JSON 函式庫，不是純 Python。本機 macOS 直接 `pip install --target` 會抓到 macOS 版本的原生函式庫，Lambda（Amazon Linux）載入時直接炸掉（`ImportModuleError`），已實測撞到；修法是 `pip install` 加 `--platform manylinux2014_x86_64 --only-binary=:all:`，強制抓 Linux 版預編譯 wheel
+- **跟 `trade_generator` 同一套打包模式**：`null_resource` 觸發條件是原始碼 sha256，`timeout` 縮到 90 秒（不是沿用 300 秒）——這裡的工作是 TLS 交握＋consumer group 加入＋一段有限的 poll 時間窗，跟迴圈式多次 DB 呼叫是不同的負載特性
+
+### 2. IAM 唯讀權限
+
+- **只給 Glue Schema Registry 唯讀權限**（`GetSchemaVersion`／`GetSchema`／`ListSchemaVersions`，範圍鎖定 `slice2-trade-events` registry）：消費端只需要拿訊息 header 裡的 schema UUID 換回 schema 定義，不需要 `msk_connector.tf` 那組寫入端才要的 `CreateSchema`／`RegisterSchemaVersion`
+- **VPC 網路**：跟 `trade_generator`／connector 掛同一張 `slice2_internal` SG，沒有新增任何 SG 規則——9094（MSK broker）跟 443（Glue Interface Endpoint）既有規則已經涵蓋
+
+### 3. Consumer 邏輯與重用設計
+
+- **每次呼叫用全新、獨立的 consumer group**：不管冷啟動或間隔多久，每次都能看到 topic 的完整歷史，不用跨呼叫維護 offset；代價是連續呼叫幾次，回傳的訊息數會累加同一批舊訊息，不是新增訊息
+- **手動逐筆解碼，不掛進 consumer 的自動 deserializer**：一筆解不開的訊息只會變成回傳結果裡的一個錯誤項目，不會讓整次呼叫失敗——這個設計讓同一支 Lambda 之後 §4 項目 9 可以直接換 `topic` 參數指向 `.dlq` topic 重用，不用改程式碼
+
+**對照表（原始碼出處）**
+
+| 主題 | 項目 | 資源 | 出處 |
+| --- | --- | --- | --- |
+| 打包與部署 | 依賴安裝與 orjson 修法 | `null_resource.build_cdc_event_verifier` | [msk_event_verifier.tf:17-38](msk_event_verifier.tf#L17-L38) |
+| 打包與部署 | Lambda 執行設定 | `aws_lambda_function.cdc_event_verifier` | [msk_event_verifier.tf:97-122](msk_event_verifier.tf#L97-L122) |
+| IAM 唯讀權限 | Glue 唯讀政策 | `data.aws_iam_policy_document.cdc_event_verifier_permissions` | [msk_event_verifier.tf:71-85](msk_event_verifier.tf#L71-L85) |
+| Consumer 邏輯與重用設計 | 環境變數（broker／registry） | `aws_lambda_function.cdc_event_verifier.environment` | [msk_event_verifier.tf:117-122](msk_event_verifier.tf#L117-L122) |
+
+**對 Data Engineer 的意義**
+
+| 你會問 | 答案 |
+| --- | --- |
+| 怎麼觸發它看 topic 上有什麼？ | `aws lambda invoke` 帶 `{"topic": "transaction.trade.v1", "max_messages": ..., "timeout_seconds": ...}` |
+| 已經驗證出什麼結果？ | insert/update/delete 三種操作、完整的 NEW→PARTIALLY_FILLED→FILLED 生命週期、CANCELLED→DELETE 路徑皆已用真實訊息驗證，細節見 [runbook](../../../docs/runbooks/slice2-cdc-event-verification.md) |
+| 之後項目 9 要驗 DLQ 怎麼辦？ | 同一支 Lambda，`topic` 換成 `transaction.trade.v1.dlq` 即可，不用改程式碼或重新部署 |
+
+**⚠️ 注意 / 限制**
+
+- 「純 Python 套件」不能只看套件自己宣告的內容，要往下追依賴樹——`aws-glue-schema-registry` 本身是純 Python，但間接依賴的 `orjson` 不是，這是本次實際踩到的坑
+- 連續呼叫這支 Lambda，回傳的訊息計數會累加 topic 的完整歷史（含 connector 第一次啟動的 initial snapshot，`op=r`），不是「這次呼叫以來的新訊息」，讀輸出時要注意
+
 <a id="outputs-tf"></a>
 ## `outputs.tf` — 部署後才知道的值
 
-**總結**：把 24 個「寫程式碼時還不知道、apply 之後才產生」的值吐出來，供驗證與後續 slice 接手使用。
+**總結**：把 25 個「寫程式碼時還不知道、apply 之後才產生」的值吐出來，供驗證與後續 slice 接手使用。
 
 | 資源 | 白話說明 | 關鍵設定 | 出處 |
 | --- | --- | --- | --- |
@@ -416,6 +461,7 @@
 | Schema Registry（3 個） | `glue_schema_registry_name`、`glue_schema_registry_arn`、`trade_events_schema_arn` | registry 名稱固定為 `slice2-trade-events`，ARN 部署後才決定 | [outputs.tf:41-51](outputs.tf#L41-L51) |
 | MSK Connect Plugin（歷史 spike，5 個） | `msk_connect_plugin_bucket_name`、`debezium_postgres_plugin_arn`、`debezium_postgres_plugin_latest_revision`、`glue_schema_registry_converter_plugin_arn`、`glue_schema_registry_converter_plugin_latest_revision` | 兩個 plugin 的 ARN 與 revision——未被真正的 connector 使用，見 `msk_connect_plugin.tf` 章節 | [outputs.tf:53-71](outputs.tf#L53-L71) |
 | MSK Connect Connector（6 個） | `msk_connector_arn`、`msk_connector_name`、`msk_connect_worker_log_group_name`、`debezium_combined_plugin_arn`、`debezium_combined_plugin_latest_revision`、`msk_connect_execution_role_arn` | 真正在跑的 connector／合併版 plugin／IAM Role，項目 8 驗證 CDC 事件時要用這些值 | [outputs.tf:73-95](outputs.tf#L73-L95) |
+| CDC 事件驗證（1 個） | `cdc_event_verifier_function_name` | 消費驗證用 Lambda 的名稱，項目 9 要用同一支 Lambda 驗 DLQ | [outputs.tf:97-99](outputs.tf#L97-L99) |
 
 **對 Data Engineer 的意義**
 

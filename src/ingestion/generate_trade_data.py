@@ -174,10 +174,12 @@ def generate(conn, num_trades: int, seed: int, dirty_rate: float, delay_seconds:
     rng = random.Random(seed)
     op_counts = {"INSERT": 0, "UPDATE": 0, "DELETE": 0}
     dirty_count = 0
+    trade_ids = []
     base_id = int(time.time())
 
     for i in range(num_trades):
         trade_id = f"T{base_id}-{i:04d}"
+        trade_ids.append(trade_id)
         operations, dirty_kind = generate_trade_lifecycle(rng, trade_id, dirty_rate)
         if dirty_kind:
             dirty_count += 1
@@ -189,6 +191,7 @@ def generate(conn, num_trades: int, seed: int, dirty_rate: float, delay_seconds:
 
     return {
         "trades": num_trades,
+        "trade_ids": trade_ids,
         "dirty_injected": dirty_count,
         "operations": op_counts,
         "status_counts": summarize(conn),

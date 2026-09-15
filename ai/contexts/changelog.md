@@ -586,3 +586,30 @@
 
 > 項目 6「CreateConnector 接受 plugin 清單」的錯誤假設是本次唯一的技術判斷失誤，但因為項目 6 有留下完整的 spike 紀錄與（這次新增的）Pattern Card，項目 7 發現問題時能立刻定位原因、重新設計，而不必從頭排查；即使問題本身很小，仍然額外沉澱成一張 Pattern Card 而不是只改 code，是為了讓下一個 MSK Connect connector（不管是誰、什麼時候加）不會重蹈覆轍。`docs/concepts/` 這次也新增了 Kafka Connect 相關學習筆記與命名規則，性質是輔助性的學習筆記，併入同一筆 commit、不在此另外展開。
 
+## Session 022 — 2026-09-15
+
+- **Engineer**: Danny
+- **Role**: Data Engineer
+- **LLM Used**: Claude Code (claude-sonnet-5)
+- **Module**: slice2a-cdc-ingestion
+
+### Completed
+
+- [x] (承接 Session 021 Next Step)完成 §4 項目 8（CDC 事件驗證）：新增 `infra/environments/dev-slice2/msk_event_verifier.tf`（Lambda + IAM 唯讀 Glue 權限）與 `src/ingestion/verify_cdc_events.py`（`kafka-python-ng` + `aws-glue-schema-registry` 消費並解碼 Debezium Avro envelope，手動逐筆 decode 避免單筆壞訊息中斷整個 poll）；部署驗證：呼叫 `slice2-trade-generator` 產生 10 筆交易後，`slice2-cdc-event-verifier` 消費到 46 筆訊息（`r:16`／`c:10`／`u:16`／`d:2`／`tombstone:2`），確認 insert/update/delete 三種操作皆帶正確 before/after 與遞增 LSN，且找到 6 筆完整 NEW→PARTIALLY_FILLED→FILLED 與 2 筆 NEW→CANCELLED→DELETE 的完整生命週期軌跡，記入 [slice2-cdc-event-verification.md](../../docs/runbooks/slice2-cdc-event-verification.md)
+- [x] 部署過程踩到 `aws-glue-schema-registry` 間接依賴 `orjson`（編譯過的 Rust extension）造成 `Runtime.ImportModuleError`，修法為 `pip install` 加 `--platform manylinux2014_x86_64 --only-binary=:all:` 抓 Lambda 相容的 Linux wheel，記入 runbook
+- [x] 更新 `docs/specs/slice2a-cdc-ingestion.md` 項目 8 狀態 ⬜→✅；刷新 `ai/contexts/infra_dev_slice2.md`（一次補齊項目 7＋8 完整現況，項目 7 的 connector 資源先前未被記錄到）；用 `/explain-infra` 更新 `dev-slice2/README.md` 新增 `msk_event_verifier.tf` 章節
+- [x] 為開發期驗證方便，`generate_trade_data.py` 的 `generate()` 回傳值新增 `trade_ids` 欄位（本次呼叫產生的 trade_id 清單），方便對照 verifier 的 `events_by_key`——討論確認這只是本專案「generator 恰好是自建模擬器」情境下的測試便利性設計，非通用 CDC 驗證方法論
+
+### Related ADRs
+
+- 無
+
+### Next Steps
+
+- [ ] 依 `docs/specs/slice2a-cdc-ingestion.md` §4 實作項目清單繼續：項目 9（Schema 破壞性變更驗證）
+- [ ] （承接 Session 021）檢查 `docs/TODO.md`「把 Pattern 封裝成 Skill」項目：尚未處理
+
+### Notes
+
+> 消費邏輯刻意手動逐筆 decode（不把 deserializer 掛進 `KafkaConsumer(value_deserializer=...)`），讓單筆解不開的訊息只計入 `decode_error`、不中斷整個 poll——這個設計讓同一支 Lambda 之後項目 9 可以直接傳 DLQ topic 重用，不需改程式碼。`op=r` 的 Debezium initial snapshot 訊息是原本沒預期到的行為，驗證時需排除在「這次呼叫產生的異動」計數之外，屬於設計上正常、但容易誤判的雜訊。
+
