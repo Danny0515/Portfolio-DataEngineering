@@ -95,10 +95,12 @@
 | [docs/specs/](docs/specs/) | 各 Slice 的元件規格（Spec-Driven Development 入口） |
 | [contracts/](contracts/) | 已生效的 Data Contract（YAML：schema、品質規則、違約行為） |
 | [docs/architecture/adr/](docs/architecture/adr/) | 架構決策紀錄 (ADR) |
+| [docs/patterns/](docs/patterns/) | 可重用設計樣式 (Pattern Card)，含索引 `overview.md`，**進入實作前優先閱讀** |
 | [docs/decision-log.md](docs/decision-log.md) | 跨 Slice 技術選型索引，標註隸屬哪個 ADR |
 | [docs/arc42/](docs/arc42/) | arc42 架構文件，含決策摘要總表 |
 | [docs/data-dictionary/](docs/data-dictionary/) | 資料字典總覽，各資料領域現況 |
-| [docs/runbooks/](docs/runbooks/) | 維運手冊（AWS 存取、故障排除、各 Slice 驗證紀錄） |
+| [docs/runbooks/](docs/runbooks/) | 維運手冊（AWS 存取、各 Slice 驗證紀錄） |
+| [docs/troubleshooting/](docs/troubleshooting/) | 已解決但可能重複踩到的錯誤模式，含索引 `overview.md`，**遇到預期外錯誤時優先查閱** |
 | [docs/concepts/](docs/concepts/) | 零基礎技術概念解說／學習筆記，加速無背景知識者上手 |
 | [infra/](infra/) | Terraform IaC，依 Slice 切分獨立 state（`environments/dev`、`environments/dev-slice2`）；各 env 目錄下的 `README.md` 為該環境 `.tf` 的白話轉譯 |
 | [src/](src/) | 原始碼：`ingestion/`（模擬資料 generator）、`quality/`（品質檢核規則）、`transform/`（Glue Job 轉換邏輯） |

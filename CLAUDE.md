@@ -62,6 +62,13 @@
 - 對這兩份文件的修改視為高風險操作，需要使用者明確確認才能進行（見 `planning_project` skill）。
 - 每次透過 `planning_project` skill 實際寫入變更後，需在對應文件的 Changelog 區塊補一行紀錄（日期／修改章節／原因），確保「地圖」的修訂軌跡可回溯。
 
+## 實作注意事項 (Implementation Guidelines)
+
+「實作過程」指 Agent 開始執行一系列有目標導向的操作（例如 plan mode 核准後轉 auto/accept-edits 執行，或任何會實際修改程式碼與基礎設施的連續操作），不含單純的問答討論。實作過程中：
+
+1. 若遇到預期外的錯誤，優先查閱 [docs/troubleshooting/overview.md](docs/troubleshooting/overview.md)，確認是否已有解決方案；若沒有對應紀錄，待本次實作結束後在該目錄新增一則。
+2. 進入實作前，優先閱讀 [docs/patterns/overview.md](docs/patterns/overview.md)，確保套用既有規範好的 Pattern，避免同一類設計問題重複發明或做出不一致的實作。
+
 ## 待辦事項 (TODO)
 
 開發過程中發現、但非當前必須處理的項目記錄於 [docs/TODO.md](docs/TODO.md)。已完成或不再需要的項目會直接移除、不保留歷史，確保只留下仍待評估的最小 context。新增項目前需先讀該文件開頭的使用規則。
