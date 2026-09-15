@@ -613,3 +613,29 @@
 
 > 消費邏輯刻意手動逐筆 decode（不把 deserializer 掛進 `KafkaConsumer(value_deserializer=...)`），讓單筆解不開的訊息只計入 `decode_error`、不中斷整個 poll——這個設計讓同一支 Lambda 之後項目 9 可以直接傳 DLQ topic 重用，不需改程式碼。`op=r` 的 Debezium initial snapshot 訊息是原本沒預期到的行為，驗證時需排除在「這次呼叫產生的異動」計數之外，屬於設計上正常、但容易誤判的雜訊。
 
+## Session 023 — 2026-09-15
+
+- **Engineer**: Danny
+- **Role**: Data Engineer
+- **LLM Used**: Claude Code (claude-sonnet-5)
+- **Module**: slice2a-cdc-ingestion
+
+### Completed
+
+- [x] (承接 Session 022 Next Step)完成 §4 項目 9（Schema 破壞性變更驗證）：對 `trade_events` schema（項目 5/6 預留的測試對象）用 AWS CLI 註冊違反 `BACKWARD` 規則的新版本（新增無 default 值的必填欄位 `order_type`），確認被 Glue Schema Registry 擋下（回傳 `Status: FAILURE`，且 `SchemaCheckpoint` 未被這個違規版本移動，只有 `LatestSchemaVersion` 前進到該失敗版本）；DLQ 機制沿用項目 8 的 `slice2-cdc-event-verifier`（傳 `topic="transaction.trade.v1.dlq"`），確認可達、0 筆訊息（健康狀態）；完整記入 [slice2-cdc-event-verification.md](../../docs/runbooks/slice2-cdc-event-verification.md)
+- [x] 釐清「用 AWS CLI 直接測試」為何不違反 RULE-001：因為這次註冊預期會被拒絕、不會有東西真的被部署/持久化，事後用 `terraform plan` 對 `aws_glue_schema.trade_events` 實際證實零殘留（不只是假設）；過程中意外發現並排除兩個跟本次驗證無關的既存議題——(1) `trade_ids` 欄位一直沒部署到 Lambda，已用 `terraform apply` 補上 (2) 兩個大型 MSK Connect plugin 的 `aws_s3_object`（檔案超過 multipart 上傳門檻，約 58MB）因 Terraform 用整檔 MD5 比對 S3 的 multipart ETag 格式，天生比不出「相等」，是已知的 Terraform provider 限制、跟內容有沒有變動無關，非本次程式碼錯誤
+- [x] 更新 `docs/specs/slice2a-cdc-ingestion.md` 項目 9 狀態 ⬜→✅；§7 驗收標準四條（項目 8 兩條＋項目 9 兩條）全部勾選
+
+### Related ADRs
+
+- 無
+
+### Next Steps
+
+- [ ] （承接 Session 021/022）檢查 `docs/TODO.md`「把 Pattern 封裝成 Skill」項目：尚未處理
+- [ ] 依 `docs/specs/slice2a-cdc-ingestion.md` §4 實作項目清單繼續：項目 10（資源啟停 runbook）
+
+### Notes
+
+> DLQ 驗證刻意沒有做「真的從來源 DB 觸發一筆訊息」的端到端實驗——Postgres 不允許對已有資料列的表新增沒有 default 值的 `NOT NULL` 欄位，若改成有 default 值則 Debezium 會把 default 帶進 Avro schema，變成 `BACKWARD` 相容的變更，根本觸發不了要驗證的破壞性場景；改用「設定面確認＋DLQ topic 可達性確認＋Registry 拒絕測試的邏輯推論」組合佐證，並在 runbook 誠實記載這個範圍界線。`infra/environments/dev-slice2/README.md` 這次也有一次全環境重新轉譯，但屬於獨立動作，不計入本次 changelog，留待 git commit 訊息記錄。
+
