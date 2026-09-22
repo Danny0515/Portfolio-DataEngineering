@@ -221,6 +221,14 @@ servicelevels:
   availability: 99.9%
 ```
 
+**延伸目標：自助式資料平台 (Self-Service Data Platform)**
+
+上面描述的是「技術契約」層——描述一個已存在的資料介面實際保證什麼（schema、品質規則、違約行為），性質類似一支已上線 API 的 OpenAPI spec，由平台/工程端撰寫維護，內容必須與實際系統一致。
+
+本專案的北極星延伸目標，是再往前疊一層**消費端驅動**的自助式能力：資料需求者不需要知道底層實作細節（如 Kafka topic 命名、connector 設定），只需要用契約語言描述「需要什麼資料、長怎樣、多新鮮」；平台依需求類型判斷是否需要工程介入、補上必要參數後，**系統依此自動建立對應的 pipeline 與 serving 層**，而不是每次都由工程師手動蓋一條新管線。
+
+這兩層的分工與各自對應到哪個 Slice，見 [execution-roadmap.md](execution-roadmap.md) 的說明。
+
 ---
 
 ## 5. DataOps (第二階段)
@@ -374,3 +382,4 @@ Portfolio-DataEngineering/
 | 2026-07-17 | §6.1 倉庫文件結構 | 改用 arc42 模板撰寫架構文件（取代 overview.md/data-flow.md），contracts/ 移至頂層以反映其為 CI/pipeline 消費的設定檔而非純文件 |
 | 2026-07-22 | §2.2 Storage | 補上資產類別命名慣例，回應 Slice0 stock 資料命名需求 |
 | 2026-07-31 | §2.2 Storage | 命名慣例拿掉多餘的 `_data` 尾綴（`market_data`→`market`、`<layer>.stock_data`→`<layer>.stock`），因為資料湖倉裡的內容本來就是資料，尾綴多餘；已同步修改所有受影響的程式與文件（S3 路徑、Iceberg table 名稱、Terraform 資源識別字、IAM/Glue Job 命名） |
+| 2026-09-22 | §4.2 Data Contract 新增「延伸目標：自助式資料平台」小節 | 討論 Slice 2a 項目 11 Data Contract 撰寫範圍時，釐清「產出端技術契約」與「消費端驅動自助式建置」是兩個不同層級的能力，後者目前完全未實作，因此明確寫入北極星目標，避免只停留在口頭共識 |

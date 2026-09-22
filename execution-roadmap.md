@@ -18,6 +18,7 @@
   - [Slice 2 — CDC 交易串流管線(第一條串流,重頭戲)](#slice-2-cdc-交易串流管線第一條串流重頭戲)
   - [Slice 3 — 即時 Serving 與風控(延續串流)](#slice-3-即時-serving-與風控延續串流)
   - [Slice 4 — 治理與 DataOps(橫向鋪在既有管線)](#slice-4-治理與-dataops橫向鋪在既有管線)
+  - [Slice-todo-1 — 自助式資料契約平台(草案)](#slice-todo-1)
 - [3. 每個 Slice 的完成 Gate(最重要的部分)](#3-每個-slice-的完成-gate最重要的部分)
 - [4. 執行節奏與紀律 (Cadence & Discipline)](#4-執行節奏與紀律-cadence-discipline)
 - [5. 與 plan.md 的關係(維護契約)](#5-與-planmd-的關係維護契約)
@@ -58,6 +59,11 @@ Serving    ████████████               │ █    │ █
 | **4** | 治理與 DataOps | Lineage、IaC、CI/CD、可觀測性 | 橫向鋪在既有管線 | 2b + 2c |
 
 > **執行紀律:一次只有一個 Slice 在 in-progress,絕不並行開兩條。**
+
+**Data Contract 橫跨多個 Slice，實際分兩層**（完整定義見 [plan.md §4.2](plan.md#42-data-contract-資料契約)）：
+
+- **技術契約（Layer 2）**：描述已存在的資料介面實際保證什麼，由工程端撰寫、必須與實際系統一致。Slice 1（`market-data.contract.yaml`）與 Slice 2（`trade-events.contract.yaml`）產出的都屬於這一層。
+- **自助式資料平台（Layer 1）**：消費端驅動、契約驅動 pipeline 自動建置——目前規劃在 `Slice-todo-1`（見下方，尚未排入正式序號，待 Slice 0-4 全數完成後才評估排序）。
 
 ---
 
@@ -222,7 +228,34 @@ MSK (trade + market events)
 
 **完成定義 (DoD)**:OpenMetadata 可視化一條端到端血緣;至少一條管線由 CI/CD 自動測試部署;基礎設施可由 Terraform 重建。
 
-**刻意不做**:過度工程化的自癒/自動回滾(列為未來展望即可)。
+**刻意不做**:過度工程化的自癒/自動回滾(列為未來展望即可);自助式資料契約平台(消費端驅動的 pipeline 自動建置)——這是治理「已存在管線」之外的能力,見 `Slice-todo-1`(草案,待 0-4 完成後才排入序號)。
+
+---
+
+<a id="slice-todo-1"></a>
+### Slice-todo-1 — 自助式資料契約平台（草案）
+
+> ⚠️ **狀態**：草案，尚未排入執行序號。依 §4 執行紀律，Slice 0-4 全數完成後才會評估、排序所有累積的 TODO Slice（可能不只這一個），屆時才決定它是否叫 Slice 5、跟其他 TODO 需求的相對順序、甚至要不要重新拆分範圍。這裡先把目前已知的形狀寫下來，避免討論結論沒有落地成文件。
+
+**目標**：讓 plan.md §4.2 提到的「自助式資料平台」北極星目標真正落地——消費端用契約語言提出資料需求，平台依需求類型判斷是否需要工程介入、補上必要參數，系統據此自動建立對應的 pipeline 與 serving，不需要每次都由工程師手動蓋一條新管線。
+
+**資料流**（草案，實際設計待這個 Slice 真正開始規劃時才收斂）：
+```
+消費端提出需求（契約語言：需要什麼資料、長怎樣、多新鮮）
+  → 合約解析系統：判斷需求類型（已有資料產品可滿足？需要新建？需要工程介入？）
+  → 若需新建：依判斷結果補上必要參數（來源連線、schema、品質規則）
+  → 系統自動建立對應 pipeline（複用 Slice 0-4 已驗證過的樣式：CDC/batch、WAP Gate、IaC）
+  → 自動掛上 serving（Athena / Redshift / Pinot，依需求類型選擇）
+```
+
+**證明的 DE 判斷**（草案）：
+- **合約解析要做到多「聰明」**——多少比例的需求能純自動化，什麼情況一定要人工把關？這條線怎麼畫。
+- **跟既有 Pattern Card 的關係**——是重新發明一套建置邏輯，還是把 Slice 0-4 累積的 Pattern Card（WAP Gate、CDC MERGE INTO 等）參數化，讓合約解析系統去「組裝」既有樣式？
+- **失敗與降級路徑**——合約解析誤判、或需求類型系統判斷不出來時，怎麼安全地退回人工處理，而不是硬建出一條錯的 pipeline。
+
+**刻意不做（暫定）**：多租戶權限模型、非本專案三大資料領域（Market/Transaction/User Behavior）以外的資料類型。
+
+**文件產出**：待正式排入序號時才產出 Spec／ADR——目前只有這裡的草案段落。
 
 ---
 
@@ -273,3 +306,5 @@ MSK (trade + market events)
 | 2026-07-17 | Slice 0「資料流」與「具體技術」 | 依 slice0-batch-market-data.md §3 定案結論同步:資料來源改為自產模擬資料,運算引擎定為 Spark(不用 dbt) |
 | 2026-08-05 | Slice 1「文件產出」 | 補齊遺漏的 spec 檔名,格式對齊 Slice 0/2 |
 | 2026-08-19 | Slice 1/Slice 2「文件產出」契約路徑、§3 Gate 表格「驗證」列 | 修正 `docs/contracts/...` 路徑對齊 plan.md §6.1 已定案的頂層 `contracts/` 目錄決定;補充 `slice{N}-verification.md` 為每個 Slice 完成定案驗證文件、衛星 runbook 由其彙總引用的命名慣例(源自 Slice1 §4.8 端到端驗證實作) |
+| 2026-09-22 | §1 Slice 總覽後新增 Data Contract 兩層說明；Slice 4「內容」新增自助化項目 | 確認 Slice 1/2 目前產出的 Data Contract 皆屬技術契約層（Layer 2），消費端驅動的自助式能力（Layer 1）規劃留待 Slice 4 才實作，呼應 plan.md §4.2 新增的北極星目標 |
+| 2026-09-22 | 新增「Slice-todo-1 — 自助式資料契約平台」草案；移除 Slice 4「內容」的自助化項目、改記於 Slice 4「刻意不做」 | 討論後確認自助式 pipeline 自動建置跟 Slice 4「治理已存在管線」的定位不符，拆成獨立草案 Slice，刻意不給正式序號（可能還有其他 TODO 需求），待 Slice 0-4 全數完成後才統一評估排序 |
