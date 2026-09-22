@@ -4,7 +4,7 @@
 >
 > 這是「原始碼意圖」的轉譯，不是部署現況——實際 resource ID／endpoint／密碼等 apply 後才產生的值，見 [ai/contexts/infra_dev_slice2.md](../../../ai/contexts/infra_dev_slice2.md)。
 
-**最後轉譯**：2026-09-15
+**最後轉譯**：2026-09-16
 **來源**：`infra/environments/dev-slice2/*.tf`（12 個檔案）
 
 ## 這個環境在做什麼
@@ -273,7 +273,7 @@
 
 ### 2. 儲存與 MSK Connect 註冊
 
-- **S3 bucket**：專屬 bucket `danny-data-engineering-slice2-msk-connect`（刻意不跨 state 借用 `dev` 環境既有 bucket，避免兩個 state 的 destroy 互相顧慮），封鎖所有公開存取
+- **S3 bucket**：專屬 bucket `danny-data-engineering-slice2-msk-connect`（刻意不跨 state 借用 `dev` 環境既有 bucket，避免兩個 state 的 destroy 互相顧慮），封鎖所有公開存取；開了 `force_destroy`——這個環境依 §3.3(b) 會反覆 apply/destroy，避免哪次手動上傳過一個 Terraform 沒追蹤到的檔案，就讓下次 `destroy` 卡在 bucket 非空
 - **Custom Plugin**：兩個各自獨立的 `aws_mskconnect_custom_plugin`（Debezium 本體、converter）
 
 ### 3. 範圍界線與生命週期
@@ -285,10 +285,10 @@
 
 | 主題 | 項目 | 資源 | 出處 |
 | --- | --- | --- | --- |
-| 打包來源與內容 | Debezium 下載與解壓 | `null_resource.build_debezium_postgres_plugin` | [msk_connect_plugin.tf:45-61](msk_connect_plugin.tf#L45-L61) |
-| 打包來源與內容 | Converter jar 下載 | `null_resource.build_glue_schema_registry_converter_plugin` | [msk_connect_plugin.tf:94-108](msk_connect_plugin.tf#L94-L108) |
-| 儲存與 MSK Connect 註冊 | S3 bucket | `aws_s3_bucket.msk_connect_plugins` | [msk_connect_plugin.tf:30-41](msk_connect_plugin.tf#L30-L41) |
-| 儲存與 MSK Connect 註冊 | 兩個 custom plugin | `aws_mskconnect_custom_plugin.debezium_postgres`、`aws_mskconnect_custom_plugin.glue_schema_registry_converter` | [msk_connect_plugin.tf:77-87](msk_connect_plugin.tf#L77-L87), [msk_connect_plugin.tf:127-137](msk_connect_plugin.tf#L127-L137) |
+| 打包來源與內容 | Debezium 下載與解壓 | `null_resource.build_debezium_postgres_plugin` | [msk_connect_plugin.tf:49-65](msk_connect_plugin.tf#L49-L65) |
+| 打包來源與內容 | Converter jar 下載 | `null_resource.build_glue_schema_registry_converter_plugin` | [msk_connect_plugin.tf:98-112](msk_connect_plugin.tf#L98-L112) |
+| 儲存與 MSK Connect 註冊 | S3 bucket、`force_destroy` | `aws_s3_bucket.msk_connect_plugins` | [msk_connect_plugin.tf:30-45](msk_connect_plugin.tf#L30-L45) |
+| 儲存與 MSK Connect 註冊 | 兩個 custom plugin | `aws_mskconnect_custom_plugin.debezium_postgres`、`aws_mskconnect_custom_plugin.glue_schema_registry_converter` | [msk_connect_plugin.tf:81-91](msk_connect_plugin.tf#L81-L91), [msk_connect_plugin.tf:131-141](msk_connect_plugin.tf#L131-L141) |
 | 範圍界線與生命週期 | 不建 connector、歷史證據定位 | 檔頭註解 | [msk_connect_plugin.tf:1-18](msk_connect_plugin.tf#L1-L18) |
 
 <a id="msk_connector-tf"></a>

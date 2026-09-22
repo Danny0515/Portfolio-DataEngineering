@@ -136,7 +136,7 @@
 | 7 | CDC connector 部署 | connector 設定（來源連線、topic 命名、Avro converter、DLQ）與 IAM/VPC 授權 | 運作中的 connector | ✅ |
 | 8 | CDC 事件驗證 | 來源 DB 的 insert / update / delete 三種操作都出現在 topic，且帶 before/after 與來源變更序（LSN） | [slice2-cdc-event-verification.md](../runbooks/slice2-cdc-event-verification.md) | ✅ |
 | 9 | Schema 破壞性變更驗證 | 註冊一個違反相容性規則的新版 schema（如新增沒有 default 值的必填欄位），確認被 Registry 擋下；違約訊息進 DLQ 而非阻塞主流程 | [slice2-cdc-event-verification.md](../runbooks/slice2-cdc-event-verification.md) | ✅ |
-| 10 | 資源啟停 runbook | 依 §3.3(b) 記錄建立/銷毀順序與成本注意事項（2b 沿用同一份） | `docs/runbooks/slice2-stack-lifecycle.md` | ⬜ |
+| 10 | 資源啟停 runbook | 依 §3.3(b) 記錄建立/銷毀順序與成本注意事項（2b 沿用同一份） | [slice2-stack-lifecycle.md](../runbooks/slice2-stack-lifecycle.md) | ✅ |
 | 11 | Data Contract 第一版 | `trade_events` model：Avro schema、品質規則、違約行為（DLQ）。**SLA（`servicelevels`）留待 2b 實測後補** | `contracts/trade-events.contract.yaml` | ⬜ |
 | 12 | 端到端驗證 | 彙總 runbook + 衛星 runbook（依 execution-roadmap.md §3 命名慣例） | `docs/runbooks/slice2a-verification.md` | ⬜ |
 | 13 | 文件產出 | 見下方 §9 | ADR / Decision Log | ⬜ |
@@ -177,7 +177,7 @@
 - [x] 註冊破壞性 schema 變更時被 Schema Registry 擋下（附錯誤訊息佐證）
 - [x] 違約 / 無法反序列化的訊息進入 DLQ topic，主流程不受阻塞
 - [ ] `contracts/trade-events.contract.yaml`（v1）納入版控，與實際註冊的 Avro schema、§6 規則一致
-- [ ] Slice 2 的資源可依 §4 項目 10 的 runbook 完整銷毀與重建
+- [ ] Slice 2 的資源可依 §4 項目 10 的 runbook 完整銷毀與重建（runbook 已產出，尚未實際執行過一次完整拆建循環驗證，見 runbook 開頭「目前狀態」）
 - [ ] 上述 §9 文件皆已產出
 
 ---

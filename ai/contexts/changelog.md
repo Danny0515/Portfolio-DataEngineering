@@ -639,3 +639,31 @@
 
 > DLQ 驗證刻意沒有做「真的從來源 DB 觸發一筆訊息」的端到端實驗——Postgres 不允許對已有資料列的表新增沒有 default 值的 `NOT NULL` 欄位，若改成有 default 值則 Debezium 會把 default 帶進 Avro schema，變成 `BACKWARD` 相容的變更，根本觸發不了要驗證的破壞性場景；改用「設定面確認＋DLQ topic 可達性確認＋Registry 拒絕測試的邏輯推論」組合佐證，並在 runbook 誠實記載這個範圍界線。`infra/environments/dev-slice2/README.md` 這次也有一次全環境重新轉譯，但屬於獨立動作，不計入本次 changelog，留待 git commit 訊息記錄。
 
+## Session 024 — 2026-09-22
+
+- **Engineer**: Danny
+- **Role**: Data Engineer
+- **LLM Used**: Claude Code (claude-sonnet-5)
+- **Module**: slice2a-cdc-ingestion
+
+### Completed
+
+- [x] (承接 Session 023 Next Step)完成 §4 項目 10（資源啟停 runbook）：新增 [slice2-stack-lifecycle.md](../../docs/runbooks/slice2-stack-lifecycle.md)，比照 `aws-access-via-bastion.md` 的 howto/reference 格式（非單次驗證紀錄，因為這是每次「用完即拆」循環都要重複照做的操作手冊）。查證發現冷啟動需要分三階段：① `terraform apply -target=aws_lambda_function.trade_generator`（RDS+generator）② 手動呼叫 `{"init_schema": true}` 建表 ③ `terraform apply`（補齊 MSK／connector／驗證用 Lambda）——因為 `msk_connector.tf` 的 connector 假設來源表已存在，但那張表只能靠手動呼叫才會建立，單次涵蓋全部 `.tf` 的 apply 大概率會讓 connector 起不來；銷毀則不需要分階段，`terraform destroy` 一次處理即可
+- [x] 修正 `infra/environments/dev-slice2/msk_connect_plugin.tf`：`aws_s3_bucket.msk_connect_plugins` 加上 `force_destroy = true` 防呆，已實際 `terraform apply`（僅此一個屬性變動，未影響任何正在跑的資源），同步更新 `dev-slice2/README.md`
+- [x] 這個 repo 第一次寫下 Slice 2 資源的成本粗估（RDS/MSK/MSK Connect/2 個 Interface VPC Endpoint 合計約 $0.28-0.30/hr、放一個月接近 $200+），來源是第三方彙整站與 AWS 官方頁面交叉核對，非官方即時報價，runbook 內已註明免責聲明
+- [x] 更新 `docs/specs/slice2a-cdc-ingestion.md` 項目 10 狀態 ⬜→✅；§7「完整銷毀與重建」驗收標準**刻意保留未勾選**並加註記——使用者明確選擇這次只產出 runbook、不實際執行 destroy→重建驗證，決定留到項目 11/12 主體完成、Slice 2a 收尾時才一次做
+
+### Related ADRs
+
+- 無
+
+### Next Steps
+
+- [ ] （承接 Session 021/022/023）檢查 `docs/TODO.md`「把 Pattern 封裝成 Skill」項目：尚未處理
+- [ ] 依 `docs/specs/slice2a-cdc-ingestion.md` §4 實作項目清單繼續：項目 11（Data Contract）——比照 Slice 1 先例撰寫技術契約層，須依**真實註冊在 `transaction.trade.v1` 的 schema**撰寫，不可照抄 `trade_events`（項目 5/6 為測試相容性檢查機制而造的攤平替身，從未被真實流量使用）
+- [ ] 項目 12（端到端驗證）收尾前，實際執行一次 destroy→重建循環，驗證 `slice2-stack-lifecycle.md` runbook 真的可行，並補勾 §7 對應驗收標準
+
+### Notes
+
+> 兩階段 apply 的必要性不是憑空推測——是用 git log 挖出 commit `df74691`（Session 018）與 changelog 舊紀錄，重建出這組資源過去實際的建置順序（RDS+generator 先 apply 並跑過 `init_schema`，MSK/plugin/connector 是之後陸續 apply 的），才確認這個依賴關係是真實存在、不是這次臆測出來的。
+

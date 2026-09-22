@@ -29,6 +29,10 @@ locals {
 # （§3.3(b)/§8 state 切分風險），跨 state 引用會讓一邊的 destroy 要顧慮另一邊。
 resource "aws_s3_bucket" "msk_connect_plugins" {
   bucket = "danny-data-engineering-slice2-msk-connect"
+
+  # §3.3(b) 用完即拆：這個環境會反覆 apply/destroy，force_destroy 避免哪次手動
+  # 上傳過一個 Terraform 沒追蹤到的檔案，就讓下次 destroy 卡在 BucketNotEmpty。
+  force_destroy = true
 }
 
 resource "aws_s3_bucket_public_access_block" "msk_connect_plugins" {
