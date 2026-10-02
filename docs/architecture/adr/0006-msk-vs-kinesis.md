@@ -4,7 +4,7 @@
 | --- | --- |
 | **狀態** | ✅ `Accepted` |
 | **日期** | 2026-08-21 |
-| **相關模組** | `infra/environments/dev-slice2/msk.tf`（§4 項目 5，尚未建立） |
+| **相關模組** | `infra/environments/dev-slice2/msk.tf` |
 | **決策者** | Danny |
 
 ## 背景 (Context)

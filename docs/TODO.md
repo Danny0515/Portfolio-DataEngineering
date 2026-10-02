@@ -22,6 +22,7 @@
 - [generate_trade_data.py 改為交錯執行多筆交易生命週期](#generate_trade_datapy-改為交錯執行多筆交易生命週期)
 - [新增整合測試](#新增整合測試)
 - [Kafka topic 改為正式 Terraform 管理](#kafka-topic-改為正式-terraform-管理)
+- [建表與寫資料拆分（schema-first DDL Job）](#建表與寫資料拆分schema-first-ddl-job)
 
 ---
 
@@ -122,3 +123,13 @@ Slice 2a 交易 generator 原規劃用 `psycopg[binary]` 連 RDS，改部署成 
 
 ### 執行內容
 待 CDC pipeline 主線（項目 5-9）跑穩、確認實際需要的 partition/retention 設定後，評估是否改成正式 Terraform 管理（`Mongey/kafka` provider 直連 broker，或重用 ADR-0008 pattern 寫建立腳本），取代目前 auto-create 的預設值；若最終決定維持 auto-create（demo 用途已足夠），直接刪除本項目，不必再處理。
+
+---
+
+## 建表與寫資料拆分（schema-first DDL Job）
+
+### 背景與原因
+`silver_stock.py` 在 `silver.stock` 不存在時直接 `createOrReplace()` 建表、跳過 WAP，第一批資料未經稽核就上 main，也不寫 `audit_log`；`gold_monthly_ohlcv.py` 每輪 `createOrReplace()` 會重新定義表結構，繞過任何預先建好的定義。正式環境通常把建表（DDL）與寫資料拆開，Job 只寫不建，第一批資料也能走完整 WAP。
+
+### 執行內容
+待 Slice 2b 項目 2 處理 `bronze.trade_events`／`silver.trade` 建表時（MERGE INTO 目標表須先存在）一併評估是否改為 schema-first，有 trade 當第二案例再決定是否回頭改 stock。若採用需連帶：Silver 移除 bootstrap 分支、Gold 改 `overwrite()`、先實測空表上 `CREATE BRANCH`／`fast_forward` 在 Glue 5.0 / Iceberg 1.7.1 的行為。表定義來源與「開發讀取 Data Contract 轉換成配置的功能」一項合併評估。

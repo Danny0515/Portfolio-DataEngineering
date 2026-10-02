@@ -667,3 +667,31 @@
 
 > 兩階段 apply 的必要性不是憑空推測——是用 git log 挖出 commit `df74691`（Session 018）與 changelog 舊紀錄，重建出這組資源過去實際的建置順序（RDS+generator 先 apply 並跑過 `init_schema`，MSK/plugin/connector 是之後陸續 apply 的），才確認這個依賴關係是真實存在、不是這次臆測出來的。
 
+## Session 025 — 2026-10-02
+
+- **Engineer**: Danny
+- **Role**: Data Engineer
+- **LLM Used**: Claude Code (claude-sonnet-5)
+- **Module**: slice2a-cdc-ingestion
+
+### Completed
+
+- [x] (承接 Session 024 Next Step)完成 §4 項目 11（Data Contract 第一版）：新增 [contracts/trade-events.contract.yaml](../../contracts/trade-events.contract.yaml)，實際查真實註冊的 `transaction.trade.v1` Avro schema（`aws glue get-schema-version`）後撰寫，證實 Debezium 自動產生的真實 schema 裡只有 `trade_id` 非 nullable、`side`/`status` 是普通 string 不是 enum——跟來源表（`create_trade_table.sql`）刻意不加 NOT NULL/CHECK 約束一致；契約的 `required` 依真實 nullability 標註，§6 完整性/有效性規則列在 `quality` 區塊當業務期望，並在檔頭誠實註明兩者目前的落差與原因
+- [x] (承接 Session 024 Next Step)完成 §4 項目 12（端到端驗證）：新增 [slice2a-verification.md](../../docs/runbooks/slice2a-verification.md)，彙總四份衛星 runbook 並**實際執行一輪 destroy→重建→煙霧測試→destroy 循環**（比照 Slice1 `slice1-verification.md` 自己跑新測試的模式，不只是彙總紙上證據）。過程中遇到三個真實狀況並已回補進 `slice2-stack-lifecycle.md` 故障排除表：RDS 建立時撞到 AWS 暫時性 `InsufficientDBInstanceCapacity`（重試解決）；長時間執行的 apply/destroy 被工具背景執行上限中斷，MSK connector 在 AWS 端已建立成功但本機 state 沒記到，用 `terraform import` 接回修復；destroy 時 Lambda 的 VPC ENI 延遲釋放卡住子網路/SG 刪除，手動 `delete-network-interface` 加速解決。重建後的煙霧測試確認 CDC 管線行為跟項目 8 一致（5 筆交易產生 16 筆正確事件）
+- [x] 完成 §4 項目 13（文件產出）：確認 `docs/decision-log.md` 與 ADR-0006/0007 其實已經完整，只修正兩篇 ADR「相關模組」欄位過時的「尚未建立」註記
+- [x] `docs/specs/slice2a-cdc-ingestion.md` §4 全部 13 項、§7 全部驗收標準轉 ✅——**Slice 2a 全數完成**
+
+### Related ADRs
+
+- 無（本次修正 ADR-0006/0007 中繼資料，非新增決策）
+
+### Next Steps
+
+- [ ] （承接 Session 021）檢查 `docs/TODO.md`「把 Pattern 封裝成 Skill」項目：尚未處理
+- [ ] 架構圖（`README.md` 批次 pipeline 圖、`docs/images/`、`docs/arc42/06_runtime_view.md` 新增的 Mermaid 流程圖）使用者仍在繪製中，本次 session 不記錄，待完成後另外處理
+- [ ] Slice 2a 已全數完成（§4/§7 皆 ✅），下一步可規劃 Slice 2b（streaming upsert）
+
+### Notes
+
+> 這次實際執行 destroy→重建循環時，`terraform force-unlock` 一度被 Claude Code 的安全機制擋下，需要使用者當場確認才能繼續；使用者要求順便把這條規則加進 `~/.claude` 設定以後自動放行，但「自我修改權限設定」本身也被系統擋下，無法代為寫入，需要使用者自己到互動式終端機用 `/permissions` 設定。
+

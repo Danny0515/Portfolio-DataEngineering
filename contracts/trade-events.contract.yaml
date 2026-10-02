@@ -1,0 +1,245 @@
+# 交易事件 Data Contract — 本專案第二份生效契約、第一份 streaming 契約。
+#
+# 格式起點同 contracts/market-data.contract.yaml（plan.md §4.2 / datacontract.com
+# spec 風格 YAML），依 Slice 2a 的實作細節調整：
+#
+#   1. 這是「技術契約」層（plan.md §4.2 定義的 Layer 2）：描述一個已存在的資料
+#      介面實際保證什麼，由工程端撰寫、必須與實際系統一致。跟 plan.md §4.2 延伸
+#      目標「自助式資料平台」（Layer 1，消費端驅動、契約驅動 pipeline 自動建置，
+#      見 execution-roadmap.md 的 `Slice-todo-1` 草案）是不同層級的能力，本契約
+#      不涉及、也不預期被任何自動化系統解析成 pipeline 設定——跟 Slice 1 的
+#      market-data.contract.yaml 一樣，CI 自動相容性檢查留給 Slice 4
+#      （docs/TODO.md 已有對應缺口），本檔案目前純粹是版控化的契約宣告。
+#
+#   2. schema 依照「真正在 transaction.trade.v1 上跑的」Avro 定義撰寫（用
+#      `aws glue get-schema-version` 直接查證，見下方 §4 項目 11 的驗證紀錄），
+#      不是 infra/environments/dev-slice2/schema_registry.tf 裡 `trade_events`
+#      那個攤平測試替身——`trade_events` 是項目 5/6 為了測試 Glue Schema
+#      Registry 的 BACKWARD 相容性檢查機制而手動造的，從未被真實流量使用（見該
+#      檔案開頭註解）。真正的 envelope schema 是項目 7 的 Debezium connector 第
+#      一次寫入 topic 時，由 AWSKafkaAvroConverter 自動以 topic 名稱註冊出來的。
+#
+#   3. 誠實落差：來源表（create_trade_table.sql）刻意不加 NOT NULL/CHECK
+#      約束（讓髒資料能到 Debezium 層供 §4 項目 8/9 測試），真實 Avro schema
+#      因此只有 trade_id 非 nullable，其餘業務欄位皆為寬鬆型別。下方 quality
+#      區塊列的完整性/有效性規則目前只是業務期望——這也是 Data Contract 目前
+#      的通用狀態：跟 Slice 1 一樣，沒有任何系統真的讀取/解析這份契約並據此
+#      強制執行（docs/TODO.md 已有對應缺口，execution-roadmap.md 的
+#      Slice-todo-1 草案也是同一個「契約還只是宣告文件」根因底下的另一個未
+#      實現能力）。Slice 2a 這條串流路徑本身還沒有對等 WAP Gate 的稽核步驟，
+#      留給 Slice 2b 的 silver.trade 階段才可能補上。
+#
+#   4. SLA（`servicelevels`）留待 Slice 2b 量到端到端延遲後才補（依 spec §4
+#      項目 11 原定範圍），本版不寫這個區塊。
+
+dataContractSpecification: 0.9.3
+id: trade-events
+info:
+  title: 交易事件 (Trade Events)
+  version: 1.0.0
+  status: active
+  owner: data-platform-team
+  description: >
+    交易狀態機（NEW → PARTIALLY_FILLED → FILLED / CANCELLED）的 CDC 事件契約。
+    來源是 RDS PostgreSQL 的 trade 表，經 Debezium（透過 MSK Connect）以邏輯
+    複寫擷取每一次 insert/update/delete，封裝成帶 before/after 影像的 Debezium
+    envelope 送進 Kafka topic。違反 Schema Registry 相容性規則的變更會在註冊時
+    被拒絕（§4 項目 9 已實測）；序列化失敗/無法轉換的訊息進 DLQ topic，不阻塞
+    主流程。欄位層級的完整性/有效性規則目前只是業務期望，見上方「誠實落差」。
+
+servers:
+  kafka:
+    type: kafka
+    topic: transaction.trade.v1
+    description: >
+      真實 CDC envelope 送達的 topic（Debezium 預設命名 transaction.public.trade，
+      經 msk_connector.tf 的 RegexRouter SMT 改名為此）。
+  kafka_dlq:
+    type: kafka
+    topic: transaction.trade.v1.dlq
+    description: >
+      違約/無法序列化訊息的去向（msk_connector.tf 的 errors.tolerance=all +
+      errors.deadletterqueue.topic.name 設定），主流程不受阻塞。
+  schemaRegistry:
+    type: glue-schema-registry
+    region: ap-northeast-1
+    registryName: slice2-trade-events
+    schemaName: transaction.trade.v1
+    compatibility: BACKWARD
+    description: >
+      允許刪除欄位、新增有 default 值的欄位；禁止新增沒有 default 值的必填
+      欄位（§4 項目 9 已用這條規則實測驗證 Registry 會擋下違規版本）。
+
+models:
+  trade:
+    description: >
+      交易記錄的業務欄位形狀，對應來源 trade 表（src/ingestion/sql/
+      create_trade_table.sql）。這組欄位在 envelope 裡以同一個 Avro 具名型別
+      `Value` 出現兩次（before／after），形狀完全一致，差異只在是否為 null。
+      `required` 依真實查到的 Avro schema nullability 標註，不是 §6 業務期望
+      （業務期望見下方 quality 區塊）。
+    type: object
+    fields:
+      trade_id:
+        type: string
+        required: true
+        unique: true
+        description: 交易唯一識別碼，來源表主鍵，Avro 層唯一非 nullable 的業務欄位
+      account_id:
+        type: string
+        required: false
+        description: 帳戶識別碼（Avro nullable，無預設值）
+      symbol:
+        type: string
+        required: false
+        description: 股票代號（Avro nullable；§6 一致性規則限定合法代號集合，見下方 quality）
+      price:
+        type: decimal
+        precision: 12
+        scale: 2
+        required: false
+        description: 成交/委託價格（Avro nullable decimal，Debezium 以 bytes + logicalType=decimal 編碼）
+      quantity:
+        type: integer
+        required: false
+        description: 數量（Avro nullable int）
+      side:
+        type: string
+        required: false
+        description: >
+          買賣方向。Avro 層是普通 string（不是 enum）——Debezium 從 Postgres TEXT
+          欄位自動產生，來源表無 CHECK 約束，技術上不限制值域；§6 有效性規則期望
+          值域為 BUY/SELL，見下方 quality（目前無執行期稽核）
+      status:
+        type: string
+        required: false
+        description: >
+          交易狀態。同 side，Avro 層是普通 string，不是 enum；§6 期望值域為
+          NEW/PARTIALLY_FILLED/FILLED/CANCELLED，見下方 quality（目前無執行期稽核）
+      event_time:
+        type: timestamp
+        required: false
+        description: >
+          交易發生時間（insert 時設定，之後不變）。Avro 層以 Debezium
+          io.debezium.time.ZonedTimestamp 編碼（底層是帶時區的 ISO-8601 string，
+          不是原生 timestamp logical type）
+      updated_at:
+        type: timestamp
+        required: false
+        description: 最後一次異動時間（每次 update 更新），編碼方式同 event_time
+    quality:
+      # 完整性 (Completeness) — 對應 spec §6；technically unenforced，見檔頭「誠實落差」
+      - rule: expect_column_values_to_not_be_null
+        dimension: completeness
+        field: trade_id
+        description: 唯一同時被 Avro schema 技術強制（非 nullable）的完整性規則
+      - rule: expect_column_values_to_not_be_null
+        dimension: completeness
+        field: account_id
+        description: 業務期望，Avro 層為 nullable，目前無執行期稽核
+      - rule: expect_column_values_to_not_be_null
+        dimension: completeness
+        field: symbol
+        description: 業務期望，Avro 層為 nullable，目前無執行期稽核
+      - rule: expect_column_values_to_not_be_null
+        dimension: completeness
+        field: side
+        description: 業務期望，Avro 層為 nullable，目前無執行期稽核
+      - rule: expect_column_values_to_not_be_null
+        dimension: completeness
+        field: status
+        description: 業務期望，Avro 層為 nullable，目前無執行期稽核
+      - rule: expect_column_values_to_not_be_null
+        dimension: completeness
+        field: event_time
+        description: 業務期望，Avro 層為 nullable，目前無執行期稽核
+
+      # 有效性 (Validity) — 對應 spec §6；technically unenforced
+      - rule: expect_column_values_to_be_in_set
+        dimension: validity
+        field: side
+        description: 業務期望值域為 BUY/SELL；Avro 層未用 enum 強制，目前無執行期稽核
+        kwargs: { value_set: ["BUY", "SELL"] }
+      - rule: expect_column_values_to_be_in_set
+        dimension: validity
+        field: status
+        description: 業務期望值域；Avro 層未用 enum 強制，目前無執行期稽核
+        kwargs: { value_set: ["NEW", "PARTIALLY_FILLED", "FILLED", "CANCELLED"] }
+      - rule: expect_column_values_to_be_between
+        dimension: validity
+        field: price
+        description: 業務期望，目前無執行期稽核
+        kwargs: { min_value: 0, strict_min: true }
+      - rule: expect_column_values_to_be_between
+        dimension: validity
+        field: quantity
+        description: 業務期望，目前無執行期稽核
+        kwargs: { min_value: 0, strict_min: true }
+
+      # 一致性 (Consistency) — 對應 spec §6
+      - rule: expect_column_values_to_be_in_set
+        dimension: consistency
+        field: symbol
+        description: >
+          僅接受合法代號集合，來源見 docs/specs/slice0-batch-market-data.md §3.4；
+          目前無執行期稽核
+        kwargs: { value_set: ["2330", "2454", "3653"] }
+
+      # 時效性 (Timeliness) — 本片只量得到「來源 DB → topic」這一段，無 SLA 數字
+      - dimension: timeliness
+        description: >
+          來源 DB 變更到 topic 可消費的延遲。本片（Slice 2a）只量測這一段作為
+          一次性觀察（見 docs/runbooks/slice2-cdc-event-verification.md），不是
+          逐筆檢核規則；端到端延遲 SLA（servicelevels）留待 Slice 2b 補。
+
+  trade_events:
+    description: >
+      Kafka 上實際的 Debezium envelope 外層結構（topic = transaction.trade.v1）。
+      `before`／`after` 的形狀同上方 `trade` model（同一個 Avro 具名型別
+      `Value`），此處不重複列欄位；哪個非 null 由 `op` 決定（c：before=null、
+      after 非 null；d：before 非 null、after=null；u：兩者皆非 null；r
+      （initial snapshot）：before=null、after 非 null）。不另掛 quality
+      區塊——欄位層級規則已掛在 `trade` model 上。
+    type: object
+    fields:
+      op:
+        type: string
+        required: true
+        description: >
+          操作碼，Avro 層是普通 string（非 enum）。本片實際觀察到 r（initial
+          snapshot read）/c（create）/u（update）/d（delete）四種值
+      before:
+        type: object
+        required: false
+        description: 異動前影像，形狀同 trade model；op=c 或 r 時為 null
+      after:
+        type: object
+        required: false
+        description: 異動後影像，形狀同 trade model；op=d 時為 null
+      source:
+        type: object
+        required: true
+        description: 來源變更序與中繼資訊（io.debezium.connector.postgresql.Source）
+        fields:
+          version: { type: string, required: true, description: Debezium 版本號 }
+          connector: { type: string, required: true, description: 固定為 postgresql }
+          name: { type: string, required: true, description: connector 邏輯名稱（topic.prefix，即 transaction） }
+          ts_ms: { type: long, required: true, description: 來源資料庫端的異動時間（ms） }
+          snapshot: { type: string, required: false, description: 是否為 initial snapshot 階段（true/first/last/false/incremental 等），預設 false }
+          db: { type: string, required: true, description: 來源資料庫名稱 }
+          schema: { type: string, required: true, description: 來源 Postgres schema，固定為 public }
+          table: { type: string, required: true, description: 來源表名稱，固定為 trade }
+          sequence: { type: string, required: false, description: Debezium 內部排序用的 LSN 序列 JSON（低階欄位） }
+          txId: { type: long, required: false, description: 來源 Postgres 交易 ID }
+          lsn: { type: long, required: false, description: 來源變更序（Postgres WAL LSN）——§4 項目 8 已實測確認隨事件順序遞增 }
+          xmin: { type: long, required: false, description: Postgres MVCC xmin（低階欄位，本片未使用） }
+      transaction:
+        type: object
+        required: false
+        description: >
+          Debezium 多表交易關聯 metadata（跨表交易排序用）；本片單表擷取
+          （只有 trade 一張表），目前沒有實際使用情境
+      ts_ms:
+        type: long
+        required: false
+        description: envelope 層級時間戳（ms），Debezium 處理/送出此筆事件的時間

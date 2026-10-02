@@ -4,7 +4,7 @@
 | --- | --- |
 | **狀態** | ✅ `Accepted` |
 | **日期** | 2026-08-21 |
-| **相關模組** | `infra/environments/dev-slice2/rds.tf`（§4 項目 4，尚未建立）、Debezium connector 設定（§4 項目 7，尚未建立） |
+| **相關模組** | `infra/environments/dev-slice2/rds.tf`、`infra/environments/dev-slice2/msk_connector.tf` |
 | **決策者** | Danny |
 
 ## 背景 (Context)

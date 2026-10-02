@@ -6,7 +6,7 @@
 
 這是一份可重複執行的操作手冊，不是單次驗證紀錄——跟 `docs/runbooks/` 底下其他 `slice2-*-verification.md` 檔案的定位不同，格式上比照 [aws-access-via-bastion.md](aws-access-via-bastion.md)。
 
-**目前狀態**：這份 runbook 是依現有 `.tf` 原始碼與過去的實際建置歷史（git log／changelog）推導撰寫，**尚未實際執行過一次完整的 destroy→重建循環驗證**（§7 對應的驗收標準因此暫不勾選，見 spec）。下次真的需要銷毀重建時，請照這份文件執行，並回頭修正任何跟實際狀況不符的地方。
+**目前狀態**：§4 項目 12 已依本文件的三階段流程實際執行過一輪完整的 destroy→重建→煙霧測試→destroy 循環（2026-10-02），確認流程本身可行；過程中遇到的真實狀況（非預期錯誤與處理方式）已整理進下方「故障排除」，完整紀錄見 [slice2a-verification.md](slice2a-verification.md)。
 
 ---
 
@@ -120,6 +120,10 @@ aws logs delete-log-group --log-group-name /aws/lambda/slice2-cdc-event-verifier
 | Connector 建立後狀態一直不是 `RUNNING`，或找不到 `public.trade` | 表還沒建立就 apply 了 connector（跳過了「建立流程」階段二的 `init_schema` 呼叫） | 確認表已存在（呼叫 `slice2-trade-generator` 的 `{"query": true}` payload 查詢，或直接連檢查），若沒有則補跑 `init_schema`，再視情況 `terraform apply -replace=aws_mskconnect_connector.debezium_postgres` |
 | `terraform apply`（階段三）卡在 MSK cluster 建立很久 | 正常現象，非錯誤 | MSK Provisioned cluster 建立本來就要 20-30 分鐘，是整個流程最久的一段，耐心等待即可 |
 | `terraform plan` 對兩個大型 MSK Connect plugin 的 `aws_s3_object` 一直顯示 etag 差異，即使剛 apply 完 | 已知、跟內容變動無關的既存現象：這兩個 zip（~58MB）超過 S3 multipart 上傳門檻，Terraform 用整檔 MD5 跟 S3 的 multipart ETag 格式天生比不出「相等」 | 不影響功能，忽略即可；不要為了讓 plan 乾淨而反覆 apply，不會收斂 |
+| `terraform apply` 建立 RDS 時報 `InsufficientDBInstanceCapacity`（`db.t4g.micro` 在這個 VPC 的 AZ 沒有足夠容量） | AWS 端暫時性容量不足，非設定問題——2026-10-02 實測遇過一次 | 直接重跑同一個 `terraform apply` 指令即可，通常很快就能排到容量；不需要改機型或換 AZ |
+| 執行中的 `terraform apply`／`destroy` 被中斷（本機工具的長時間執行限制、網路斷線等），後續指令報 `Error acquiring the state lock` | 被中斷的指令沒能正常釋放 state lock | 先用 `ps aux \| grep terraform` 確認真的沒有其他 terraform 行程在跑，再執行 `terraform force-unlock -force <lock-id>`（lock ID 會在錯誤訊息裡）；**此操作有風險，執行前務必先排除真的有併發操作在跑的可能性** |
+| 上面那種中斷發生在 `aws_mskconnect_connector` 建立中途——AWS 其實已經真的在建立（可用 `aws kafkaconnect list-connectors` 查到 `CREATING`／`RUNNING`），但本機 `terraform state list` 查不到這個資源 | Terraform CLI 被中斷時，連線器剛送出 `CreateConnector` 請求、還沒等到結果就被取消，AWS 端的建立不會因此停止，但本機 state 沒記到 | 等 AWS 端狀態穩定（`RUNNING` 或 `FAILED`）後，用 `terraform import aws_mskconnect_connector.debezium_postgres <connector-arn>` 把它接回 state，再跑一次 `terraform plan` 確認沒有意外差異（這次實測接回後只剩 `database.password` 敏感度標記這種無害的 in-place update） |
+| `terraform destroy` 銷毀子網路／Security Group 時卡很久（正常應該幾秒內完成，卻跑了幾分鐘還沒結束） | 掛 VPC 的 Lambda（`trade_generator`／`cdc_event_verifier`）被刪除後，其 ENI 會先進入 `available`（已卸載、尚未釋放）狀態一段時間才被 AWS 自動回收，期間會卡住所屬子網路／SG 的刪除——2026-10-02 實測卡了將近 10 分鐘 | 用 `aws ec2 describe-network-interfaces --filters "Name=vpc-id,Values=<vpc-id>"` 確認是否有 `available` 狀態的殘留 ENI，若有可直接 `aws ec2 delete-network-interface --network-interface-id <eni-id>` 手動刪除加速，不需要死等 AWS 自動回收 |
 
 ---
 
@@ -131,3 +135,4 @@ aws logs delete-log-group --log-group-name /aws/lambda/slice2-cdc-event-verifier
 - [slice2-cdc-event-verification.md](slice2-cdc-event-verification.md) — CDC 事件／Schema 相容性／DLQ 驗證
 - [ai/contexts/infra_dev_slice2.md](../../ai/contexts/infra_dev_slice2.md) — 目前實際部署狀態快照
 - `infra/environments/dev-slice2/msk_connect_plugin.tf` — `force_destroy` 設定
+- [slice2a-verification.md](slice2a-verification.md) — §4 項目 12 實際執行過的完整 destroy→重建→destroy 循環紀錄
