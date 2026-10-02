@@ -14,6 +14,7 @@
 ## 目錄 (Table of Contents)
 
 - [架構總覽 (Architecture Overview)](#架構總覽-architecture-overview)
+  - [Batch pipeline 架構圖](#batch-pipeline-架構圖)
 - [技術棧 (Tech Stack)](#技術棧-tech-stack)
 - [目前進度 (Current Status)](#目前進度-current-status)
 - [文件導覽 (Documentation Map)](#文件導覽-documentation-map)
@@ -52,6 +53,12 @@
 - **Single Source of Truth (單一事實來源)**：S3 為唯一儲存底層，所有查詢引擎共用同一份資料
 
 完整設計細節（各層技術選型理由、Data Quality/Contract 設計等）見 [plan.md](plan.md)。
+
+### Batch pipeline 架構圖
+![Batch pipeline](docs/images/batch-pipeline-infra.png)
+
+### Batch pipeline WAP 機制
+![Batch pipeline WAP](docs/images/batch-pipeline-wap.png)
 
 ## 技術棧 (Tech Stack)
 
