@@ -15,6 +15,8 @@
 
 - [架構總覽 (Architecture Overview)](#架構總覽-architecture-overview)
   - [Batch pipeline 架構圖](#batch-pipeline-架構圖)
+  - [Batch pipeline WAP 機制](#batch-pipeline-wap-機制)
+  - [CDC pipeline 架構圖](#cdc-pipeline-架構圖)
 - [技術棧 (Tech Stack)](#技術棧-tech-stack)
 - [目前進度 (Current Status)](#目前進度-current-status)
 - [文件導覽 (Documentation Map)](#文件導覽-documentation-map)
@@ -111,6 +113,8 @@
 | [docs/runbooks/](docs/runbooks/) | 維運手冊（AWS 存取、各 Slice 驗證紀錄） |
 | [docs/troubleshooting/](docs/troubleshooting/) | 已解決但可能重複踩到的錯誤模式，含索引 `overview.md`，**遇到預期外錯誤時優先查閱** |
 | [docs/concepts/](docs/concepts/) | 零基礎技術概念解說／學習筆記，加速無背景知識者上手 |
+| [docs/TODO.md](docs/TODO.md) | 開發中發現、但非當前 Slice 必須處理的待辦，完成即刪除、不保留歷史 |
 | [infra/](infra/) | Terraform IaC，依 Slice 切分獨立 state（`environments/dev`、`environments/dev-slice2`）；各 env 目錄下的 `README.md` 為該環境 `.tf` 的白話轉譯 |
 | [src/](src/) | 原始碼：`ingestion/`（模擬資料 generator）、`quality/`（品質檢核規則）、`transform/`（Glue Job 轉換邏輯） |
+| [tests/](tests/) | pytest 測試：`ingestion/`（generator）、`quality/`（GX expectation suite 與 Spark 驗證） |
 | [ai/contexts/](ai/contexts/) | Agent 執行規則、infra 現況快照、開發 session 紀錄 |
