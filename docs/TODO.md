@@ -126,7 +126,7 @@ Slice 2a 交易 generator 原規劃用 `psycopg[binary]` 連 RDS，改部署成 
 
 ---
 
-## 建表與寫資料拆分（schema-first DDL Job）
+## 改善跳過 WAP：建表與寫資料拆分（schema-first DDL Job）
 
 ### 背景與原因
 `silver_stock.py` 在 `silver.stock` 不存在時直接 `createOrReplace()` 建表、跳過 WAP，第一批資料未經稽核就上 main，也不寫 `audit_log`；`gold_monthly_ohlcv.py` 每輪 `createOrReplace()` 會重新定義表結構，繞過任何預先建好的定義。正式環境通常把建表（DDL）與寫資料拆開，Job 只寫不建，第一批資料也能走完整 WAP。
