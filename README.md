@@ -87,10 +87,9 @@
 
 - **Slice 0 — Walking Skeleton（✅ 完成）**：批次骨架，第三方歷史行情檔 → S3 raw landing → Bronze (Iceberg) → Silver → Gold → Athena 查得到
 - **Slice 1 — Data Quality + Contract（✅ 完成）**：疊加 WAP (Write-Audit-Publish) 品質關卡於批次路徑，Great Expectations Audit、Publish/擋下機制、`market-data.contract.yaml`（v1）
-- **Slice 2a — CDC 交易事件擷取（進行中）**：來源 OLTP DB → Kafka（Debezium + MSK Connect + Avro/Schema Registry），本專案第一條即時路徑的上半段
-  - ✅ §3 待確認事項全數拍板（RDS PostgreSQL、Debezium + MSK Connect、MSK Provisioned + 用完即拆、Avro + Glue Schema Registry）
-  - ✅ §4 項目 1-6：網路層（VPC/SG/VPC Endpoint）、來源 RDS、交易資料 generator（Lambda）、MSK + Glue Schema Registry、Debezium plugin 打包 spike，皆已部署並實測驗證
-  - ⏳ §4 項目 7 起：CDC connector 部署、端到端事件驗證、Schema 破壞性變更驗證
+- **Slice 2a — CDC 交易事件擷取（✅ 完成）**：來源 OLTP DB → Kafka（Debezium + MSK Connect + Avro/Schema Registry），CDC 事件帶 before / after 影像，Schema 破壞性變更由 Registry 擋下、違約訊息進 DLQ，`trade-events.contract.yaml`（v1）
+  - ℹ️ 依「用完即拆」策略，Slice 2 的雲端資源目前為已銷毀狀態，重建步驟見 [slice2-stack-lifecycle.md](docs/runbooks/slice2-stack-lifecycle.md)
+- **Slice 2b — 串流 upsert 落地（規劃中）**：Kafka → Iceberg 當前狀態表；spec 的 §3 待確認事項尚未拍板，尚未開始實作
 
 詳細規格與驗收標準見對應 Slice 的 spec（[docs/specs/](docs/specs/)）；已拍板的架構決策見 [docs/architecture/adr/](docs/architecture/adr/)；跨 Slice 技術選型索引見 [docs/decision-log.md](docs/decision-log.md)。
 
