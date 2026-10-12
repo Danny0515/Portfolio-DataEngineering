@@ -60,6 +60,9 @@
 ### Batch pipeline WAP 機制
 ![Batch pipeline WAP](docs/images/batch-pipeline-wap.png)
 
+### CDC pipeline 架構圖
+![CDC pipeline](docs/images/cdc-pipeline-infra.png)
+
 ## 技術棧 (Tech Stack)
 
 | 領域 | 主選 (Primary) |
