@@ -128,7 +128,7 @@
 
 | 路徑 | 引擎 | 推薦技術 | 用途 |
 | --- | --- | --- | --- |
-| Streaming 轉換 | **Apache Flink** | **Amazon Managed Service for Apache Flink** | 即時聚合、視窗運算 (Windowing)、即時風控規則、Tick → K 線 |
+| Streaming 轉換 | **Apache Flink** | **Amazon Managed Service for Apache Flink** | 即時聚合、視窗運算 (Windowing)、即時風控規則、Tick → K 線（Slice 3 起，引擎於該 Slice 重新評估；Slice 2b 的 CDC 狀態落地實際採 Glue Streaming，見 [ADR-0010](docs/architecture/adr/0010-glue-streaming-vs-managed-flink.md)） |
 | Batch 轉換 (重運算) | **Apache Spark** | **EMR on EKS / AWS Glue** | 大量歷史回算、對帳、複雜 Join |
 | Batch 轉換 (SQL 語意層) | **dbt** | **dbt-core + dbt-athena / dbt-trino** | Silver → Gold 的業務邏輯、可測試、可文件化、可血緣 |
 | 編排 (Orchestration) | **Airflow** | **Amazon MWAA** (或 Dagster) | 排程、相依管理、SLA、回填 (Backfill) |
@@ -343,7 +343,7 @@ Portfolio-DataEngineering/
 | 批次擷取 | Airbyte / DMS | Glue | 連接器豐富 |
 | 儲存底層 | Amazon S3 | — | 業界標準資料湖底層 |
 | Table Format | Apache Iceberg | Delta / Hudi | ACID + Time Travel + Schema/Partition Evolution |
-| 串流運算 | Apache Flink (Managed) | Spark Structured Streaming | 真串流、低延遲、視窗運算強 |
+| 串流運算 | Apache Flink (Managed) | Spark Structured Streaming | 真串流、低延遲、視窗運算強；Slice 2b 實際採 Spark Structured Streaming（Glue），見 ADR-0010 |
 | 批次運算 | Spark (EMR/Glue) | — | 分散式重運算 |
 | SQL 轉換 | dbt | — | 可測試、可血緣、文件化 |
 | 編排 | Airflow (MWAA) | Dagster | 生態成熟 |
@@ -383,3 +383,4 @@ Portfolio-DataEngineering/
 | 2026-07-22 | §2.2 Storage | 補上資產類別命名慣例，回應 Slice0 stock 資料命名需求 |
 | 2026-07-31 | §2.2 Storage | 命名慣例拿掉多餘的 `_data` 尾綴（`market_data`→`market`、`<layer>.stock_data`→`<layer>.stock`），因為資料湖倉裡的內容本來就是資料，尾綴多餘；已同步修改所有受影響的程式與文件（S3 路徑、Iceberg table 名稱、Terraform 資源識別字、IAM/Glue Job 命名） |
 | 2026-09-22 | §4.2 Data Contract 新增「延伸目標：自助式資料平台」小節 | 討論 Slice 2a 項目 11 Data Contract 撰寫範圍時，釐清「產出端技術契約」與「消費端驅動自助式建置」是兩個不同層級的能力，後者目前完全未實作，因此明確寫入北極星目標，避免只停留在口頭共識 |
+| 2026-10-16 | §2.3 Transformation「Streaming 轉換」列、§8 技術選型總表「串流運算」列 | Slice 2b 討論後，CDC 狀態落地的串流引擎選 Glue Streaming 而非 Managed Flink（ADR-0010）：本片只是把 topic 納入 Lakehouse、可接受秒級延遲，且 Glue 在 MERGE INTO 冪等與 Glue Schema Registry 解碼的未知項較少；Flink 仍為 Slice 3 視窗聚合的候選，於該 Slice 重新評估 |

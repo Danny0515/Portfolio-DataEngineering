@@ -24,3 +24,5 @@
 | [ADR-0007](../architecture/adr/0007-cdc-vs-batch-polling.md) | 為何用 CDC 而非定時撈整張表 | ✅ `Accepted` |
 | [ADR-0008](../architecture/adr/0008-lambda-vpc-access-gateway.md) | 私有子網路資源存取：以 Lambda 作為存取閘道，取代 Bastion/SSM | ✅ `Accepted` |
 | [ADR-0009](../architecture/adr/0009-msk-connect-trust-policy-sourcearn-tradeoff.md) | MSK Connect worker IAM trust policy 的 SourceArn 妥協方案 | ✅ `Accepted` |
+| [ADR-0010](../architecture/adr/0010-glue-streaming-vs-managed-flink.md) | Slice 2b 串流運算選 Glue Streaming，不選 Managed Flink | ✅ `Accepted` |
+| [ADR-0011](../architecture/adr/0011-streaming-silver-quality-gate.md) | 串流 Silver 的品質閘：Registry 管結構、Silver 管值，逐筆規則加隔離 | ✅ `Accepted` |

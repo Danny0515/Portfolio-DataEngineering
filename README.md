@@ -74,7 +74,7 @@
 | 批次運算 | AWS Glue Jobs（代管 Spark） |
 | 串流訊息中介 | Amazon MSK (Managed Kafka) + MSK Connect |
 | CDC 擷取 | Debezium（透過 MSK Connect） |
-| 串流運算 | Apache Flink（規劃中，Slice 2b 導入） |
+| 串流運算 | AWS Glue Streaming（Spark Structured Streaming） |
 | Ad-hoc 查詢 | Amazon Athena (Trino) |
 | Catalog | AWS Glue Data Catalog + Lake Formation |
 | Schema Registry | AWS Glue Schema Registry (Avro) |
@@ -91,7 +91,7 @@
 - **Slice 1 — Data Quality + Contract（✅ 完成）**：疊加 WAP (Write-Audit-Publish) 品質關卡於批次路徑，Great Expectations Audit、Publish/擋下機制、`market-data.contract.yaml`（v1）
 - **Slice 2a — CDC 交易事件擷取（✅ 完成）**：來源 OLTP DB → Kafka（Debezium + MSK Connect + Avro/Schema Registry），CDC 事件帶 before / after 影像，Schema 破壞性變更由 Registry 擋下、違約訊息進 DLQ，`trade-events.contract.yaml`（v1）
   - ℹ️ 依「用完即拆」策略，Slice 2 的雲端資源目前為已銷毀狀態，重建步驟見 [slice2-stack-lifecycle.md](docs/runbooks/slice2-stack-lifecycle.md)
-- **Slice 2b — 串流 upsert 落地（規劃中）**：Kafka → Iceberg 當前狀態表；spec 的 §3 待確認事項尚未拍板，尚未開始實作
+- **Slice 2b — 串流 upsert 落地（規劃中）**：Kafka → Iceberg（Bronze 事件 append、Silver `MERGE INTO` 維護當前狀態，逐筆品質規則加隔離表）；spec 的 §3 已全數拍板、串流引擎選 Glue Streaming，尚未開始實作
 
 詳細規格與驗收標準見對應 Slice 的 spec（[docs/specs/](docs/specs/)）；已拍板的架構決策見 [docs/architecture/adr/](docs/architecture/adr/)；跨 Slice 技術選型索引見 [docs/decision-log.md](docs/decision-log.md)。
 

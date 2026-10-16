@@ -54,7 +54,7 @@ Serving    ████████████               │ █    │ █
 | --- | --- | --- | --- | --- |
 | **0** | Walking Skeleton(批次骨架) | Lakehouse 端到端、Medallion、append | — (基準) | 0 + 1a |
 | **1** | 資料品質 + 資料契約 | WAP Gate、品質維度、Data Contract | 疊在 Slice 0 | 2a + 4 (契約) |
-| **2** | CDC 交易串流管線 | CDC、upsert/MERGE、真串流 | 對照 Slice 0 的 batch/append | 1b |
+| **2** | CDC 交易串流管線 | CDC、upsert/MERGE、串流落地 | 對照 Slice 0 的 batch/append | 1b |
 | **3** | 即時 Serving 與風控 | Windowing、延遲 vs 成本、即時 OLAP | 延續 Slice 2 的串流 | 1c |
 | **4** | 治理與 DataOps | Lineage、IaC、CI/CD、可觀測性 | 橫向鋪在既有管線 | 2b + 2c |
 
@@ -143,17 +143,20 @@ Bronze → Silver ──▶ [Write] 寫入 Iceberg 暫存分支
 
 **目標**:引入即時路徑。從交易 DB 以 CDC 擷取變更,經串流處理,以 **upsert** 方式維護一張「當前狀態」表。這是整個作品集判斷力的核心展示。
 
+**拆分**:本 Slice 實際拆成 2a(CDC 擷取到 Kafka,見 `docs/specs/slice2a-cdc-ingestion.md`)與 2b(串流落地到 Iceberg,見 `docs/specs/slice2b-streaming-upsert.md`)兩份 spec。
+
 **資料流**:
 ```
 Trade DB (OLTP)
   → Debezium (CDC, 擷取 insert/update/delete)
-  → MSK (Kafka topic: trade.events.v1, 以 Avro + Schema Registry)
-  → Flink (串流消費)
+  → MSK (Kafka topic: transaction.trade.v1, 以 Avro + Schema Registry)
+  → Glue Streaming (Spark Structured Streaming, 串流消費)
+  → Iceberg Bronze (CDC 事件原樣 append)
   → Iceberg Silver (MERGE INTO / upsert,維護每筆交易當前狀態)
   → Athena
 ```
 
-**具體技術**:Debezium + MSK Connect;Amazon MSK;Glue Schema Registry(Avro);Amazon Managed Service for Apache Flink;Iceberg MERGE INTO。
+**具體技術**:Debezium + MSK Connect;Amazon MSK;Glue Schema Registry(Avro);AWS Glue Streaming(Spark Structured Streaming);Iceberg MERGE INTO。
 
 **證明的 DE 判斷**(這片的 ADR 最有份量,因為有 Slice 0 當對照):
 - **CDC vs batch polling** —— 為何不定時撈整張表?(對來源負載、延遲、抓不到中間態、刪除偵測)。
@@ -164,9 +167,12 @@ Trade DB (OLTP)
 - **exactly-once / 冪等** —— CDC + upsert 如何避免重複。
 
 **文件產出**:
-- `docs/specs/slice2-cdc-trade-pipeline.md`
-- `docs/architecture/adr/0004-msk-vs-kinesis.md`
-- `docs/architecture/adr/0005-cdc-vs-batch-polling.md`
+- `docs/specs/slice2a-cdc-ingestion.md`
+- `docs/specs/slice2b-streaming-upsert.md`
+- `docs/architecture/adr/0006-msk-vs-kinesis.md`
+- `docs/architecture/adr/0007-cdc-vs-batch-polling.md`
+- `docs/architecture/adr/0010-glue-streaming-vs-managed-flink.md`
+- `docs/architecture/adr/0011-streaming-silver-quality-gate.md`
 - `docs/patterns/cdc-merge-into.md`(Pattern Card)
 - `contracts/trade-events.contract.yaml`
 - Decision Log:append(Slice 0)與 upsert(Slice 2)的完整對照
@@ -189,7 +195,7 @@ MSK (trade + market events)
   → 儀表板 / API
 ```
 
-**具體技術**:Flink Windowing;Apache Pinot(即時 OLAP)—— 此選型原本在 plan.md 標為 🧪 探索,於本 Slice 收斂;或先用 Athena 過渡再評估升級。
+**具體技術**:Flink Windowing;Apache Pinot(即時 OLAP)—— 此選型原本在 plan.md 標為 🧪 探索,於本 Slice 收斂;或先用 Athena 過渡再評估升級。串流引擎於本 Slice 的 spec §3 重新評估(Flink 或 Glue Streaming);Slice 2b 已採 Glue Streaming(見 ADR-0010),兩者銜接點是 Kafka topic 與 Iceberg 表,引擎中立。
 
 **證明的 DE 判斷**:
 - **Windowing** —— tumbling / sliding / session window 各用在哪。
@@ -308,3 +314,4 @@ MSK (trade + market events)
 | 2026-08-19 | Slice 1/Slice 2「文件產出」契約路徑、§3 Gate 表格「驗證」列 | 修正 `docs/contracts/...` 路徑對齊 plan.md §6.1 已定案的頂層 `contracts/` 目錄決定;補充 `slice{N}-verification.md` 為每個 Slice 完成定案驗證文件、衛星 runbook 由其彙總引用的命名慣例(源自 Slice1 §4.8 端到端驗證實作) |
 | 2026-09-22 | §1 Slice 總覽後新增 Data Contract 兩層說明；Slice 4「內容」新增自助化項目 | 確認 Slice 1/2 目前產出的 Data Contract 皆屬技術契約層（Layer 2），消費端驅動的自助式能力（Layer 1）規劃留待 Slice 4 才實作，呼應 plan.md §4.2 新增的北極星目標 |
 | 2026-09-22 | 新增「Slice-todo-1 — 自助式資料契約平台」草案；移除 Slice 4「內容」的自助化項目、改記於 Slice 4「刻意不做」 | 討論後確認自助式 pipeline 自動建置跟 Slice 4「治理已存在管線」的定位不符，拆成獨立草案 Slice，刻意不給正式序號（可能還有其他 TODO 需求），待 Slice 0-4 全數完成後才統一評估排序 |
+| 2026-10-16 | §1 Slice 總覽、Slice 2「資料流／具體技術／文件產出」、Slice 3「具體技術」 | Slice 2 實際拆成 2a（CDC 擷取）與 2b（串流落地）兩份 spec；2b 串流引擎改為 Glue Streaming（ADR-0010）；修正與現況不一致的 topic 名稱、spec 檔名與 ADR 編號（0006／0007），並新增 ADR-0010、0011 |
