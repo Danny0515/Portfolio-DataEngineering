@@ -30,6 +30,16 @@
             "statusMessage": "檢查 .tf 異動是否需要重新轉譯白話說明"
           }
         ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/track-pattern-usage.sh",
+            "statusMessage": "累計 Pattern Card 使用次數"
+          }
+        ]
       }
     ]
   }

@@ -2,6 +2,8 @@
 
 > 這份文件是「總覽層」：收錄本專案已拍板、可重用的設計樣式（Pattern Card）。**進入實作前一律先讀這份索引**，確認有沒有既有樣式可以直接套用，避免同一類設計問題在不同 Slice 重新想一遍、甚至做出不一致的實作。單篇 Pattern Card 的詳細機制、適用情境、重用步驟見各檔案本身；本文件只列摘要與定位。
 
+> **封裝成 Skill 的時機**：在使用者沒主動提出的情況下，如果既有 pattern 被重複使用達 3 次，就詢問使用者是否要封裝成 skill。使用次數由 PostToolUse hook（[`.claude/hooks/track-pattern-usage.sh`](../../.claude/hooks/track-pattern-usage.sh)）自動累計：以「有多少個不同 session 讀過該 Pattern Card」近似「被使用幾次」，記錄在本機的 `.claude/state/pattern-usage.json`（不進版控）；累計達 3 次時 hook 會提醒 Agent 向使用者詢問一次，詢問過就不再重複。
+
 ---
 
 ## WAP (Write-Audit-Publish) Quality Gate

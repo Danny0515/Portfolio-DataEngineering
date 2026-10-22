@@ -15,14 +15,13 @@
 - [如何驗證 Data Contract schema](#如何驗證-data-contract-schema)
 - [開發 Data Contract 轉換成 GX 設定的功能](#開發-data-contract-轉換成-gx-設定的功能)
 - [開發讀取 Data Contract 轉換成配置的功能](#開發讀取-data-contract-轉換成配置的功能)
-- [把 Pattern 封裝成 Skill](#把-pattern-封裝成-skill)
 - [arc42 08_concepts.md 內容通用化](#arc42-08_conceptsmd-內容通用化)
 - [Lake Formation／IAM 權限 drift 偵測自動化](#lake-formationiam-權限-drift-偵測自動化)
 - [Python 套件跨執行環境部署的選型原則](#python-套件跨執行環境部署的選型原則)
 - [generate_trade_data.py 改為交錯執行多筆交易生命週期](#generate_trade_datapy-改為交錯執行多筆交易生命週期)
 - [新增整合測試](#新增整合測試)
 - [Kafka topic 改為正式 Terraform 管理](#kafka-topic-改為正式-terraform-管理)
-- [建表與寫資料拆分（schema-first DDL Job）](#建表與寫資料拆分schema-first-ddl-job)
+- [改善跳過 WAP：建表與寫資料拆分（schema-first DDL Job）](#改善跳過-wap建表與寫資料拆分schema-first-ddl-job)
 
 ---
 
@@ -53,16 +52,6 @@
 
 ### 執行內容
 待 Slice4 評估開發「Data Contract 讀取器」，讓契約成為 SSOT：依 `physicalName`/`servers` 對應到要執行的 transformation job、`fields` 自動產生或比對目標表 schema、`quality` 自動轉換成 GX config（沿用前一項的轉換工具），逐步取代目前手動維護的重複設定。
-
----
-
-## 把 Pattern 封裝成 Skill
-
-### 背景與原因
-`docs/patterns/*.md` 記錄的是可重現的技術棧與實作樣式，目前只是文件，套用時要人工或 Agent 讀文件後手動實作。封裝成 skill 能更精準控制產出格式，也讓 pattern 的演進可被版控追蹤。
-
-### 執行內容
-留到整個 plan.md 規劃的所有 Slice/Phase 都完成後再評估是否實踐；除非中途某個 Pattern 需要被大量複現（多個 Slice 重複套用同一樣式），才提前考慮實作對應 skill。
 
 ---
 

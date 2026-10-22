@@ -239,3 +239,6 @@ tfplan*
 
 # Generated data (regenerable, not tracked)
 data/
+
+# Claude Code hook runtime state (per machine)
+.claude/state/
