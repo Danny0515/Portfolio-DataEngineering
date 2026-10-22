@@ -19,7 +19,13 @@
 
 ## 交易資料 (Transaction Data)
 
-尚未開始（對應 execution-roadmap.md Slice 2 — CDC 交易串流管線）。
+### 交易 (trade)
+
+- **資料來源**：模擬交易 generator（[src/ingestion/generate_trade_data.py](../../src/ingestion/generate_trade_data.py)，部署為 Lambda `slice2-trade-generator`）對來源 RDS PostgreSQL 的 `trade` 表產生交易狀態機變更（NEW → PARTIALLY_FILLED → FILLED／CANCELLED），不對接真實交易系統（見 [docs/specs/slice2a-cdc-ingestion.md](../specs/slice2a-cdc-ingestion.md) §3.1）
+- **涵蓋標的**：沿用 Slice 0 的 `2330`、`2454`、`3653`，讓兩條路徑日後（Slice 3）能 join
+- **現況**：Slice 2a §4 十三項全數完成——來源 `trade` 表經 Debezium（MSK Connect）以 CDC 擷取，事件（含 before／after 影像與來源變更序 LSN）送進 Kafka topic `transaction.trade.v1`（Avro + Glue Schema Registry，相容性 `BACKWARD`），無法序列化的訊息進 `transaction.trade.v1.dlq`；Data Contract 為 [contracts/trade-events.contract.yaml](../../contracts/trade-events.contract.yaml)（v1）。依「用完即拆」策略，Slice 2 的雲端資源目前為已銷毀狀態（2026-10-02），重建步驟見 [slice2-stack-lifecycle.md](../runbooks/slice2-stack-lifecycle.md)
+- **Lakehouse 表**：尚未建立。`bronze.trade_events`（CDC 事件原樣 append）與 `silver.trade`（每筆交易的最新合規狀態，`MERGE INTO`）為 Slice 2b 規劃，spec 的待確認事項已全數拍板，尚未開始實作
+- **相關文件**：[docs/specs/slice2a-cdc-ingestion.md](../specs/slice2a-cdc-ingestion.md)、[docs/specs/slice2b-streaming-upsert.md](../specs/slice2b-streaming-upsert.md)、[docs/runbooks/slice2a-verification.md](../runbooks/slice2a-verification.md)
 
 ---
 

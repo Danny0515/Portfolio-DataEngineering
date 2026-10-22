@@ -695,3 +695,33 @@
 
 > 這次實際執行 destroy→重建循環時，`terraform force-unlock` 一度被 Claude Code 的安全機制擋下，需要使用者當場確認才能繼續；使用者要求順便把這條規則加進 `~/.claude` 設定以後自動放行，但「自我修改權限設定」本身也被系統擋下，無法代為寫入，需要使用者自己到互動式終端機用 `/permissions` 設定。
 
+## Session 026 — 2026-10-22
+
+- **Engineer**: Danny
+- **Role**: Data Engineer
+- **LLM Used**: Claude Code (claude-sonnet-5-5)
+- **Module**: slice2b-streaming-upsert（規劃）、docs、hooks
+
+### Completed
+
+- [x] (承接 Session 025 Next Step) 完成 Slice 2b 規劃修訂：Kafka → Bronze 改由 Iceberg Kafka Connect sink（MSK Connect）負責，Silver 的 Glue Streaming 作業改讀 Bronze（Iceberg append 快照）、不再連 Kafka。新增 [ADR-0012](../../docs/architecture/adr/0012-kafka-connect-iceberg-sink-bronze.md)（💬 Proposed，待 spike 通過轉 Accepted）；ADR-0010 維持 Accepted 並加範圍註記；[spec 2b](../../docs/specs/slice2b-streaming-upsert.md) §1/§2/§3.1/§3.2/§4/§5/§8/§9 同步調整，§4 項目 1 拆成「sink on MSK Connect」與「Silver 讀 Iceberg」兩個獨立 spike 並附退路；決策總表與 decision-log 各新增一列。Bronze 因 Avro 已保證型別，改為有型別欄位，取代原本「JSON 字串原樣保存」
+- [x] [08_concepts.md](../../docs/arc42/08_concepts.md) 改為批次／串流兩種形態（串流標明規劃中、尚未實作），並修正該檔 TOC 與標題編號不一致造成的失效連結（TOC 8.5–8.8 → 8.2–8.5、內文交叉引用），連帶修正 `06_runtime_view.md`、`slice0-verification.md`、ADR-0003 對該檔章節的引用
+- [x] (承接 Session 025 Next Step) 批次架構圖完成：`docs/images/batch-pipeline-infra.png`、`batch-pipeline-wap.png` 納入 README；`06_runtime_view.md` 的 6.1 改為含 WAP 的流程，新增 6.2「批次資料流細節」（處理邏輯與 WAP 品質關卡）
+- [x] 新增實作期知識機制：[docs/troubleshooting/](../../docs/troubleshooting/overview.md)（首篇為 Python 編譯依賴在 macOS 與 Lambda 平台不符）、[docs/patterns/overview.md](../../docs/patterns/overview.md)，並在 CLAUDE.md 新增「實作注意事項」（遇到預期外錯誤先查 troubleshooting、進入實作前先讀 patterns 索引）；`docs/concepts/` 新增命名規則（技術名稱開頭）與首篇 `kafka_connect-converter-schema-registry-flow.md`
+- [x] 在 Google Drive 的 `Design`（draw.io）`pipeline` 頁新增 ④ 圖，位於 ③ 正下方：呈現調整後的完整架構（Slice 2a 已驗證部分 + Slice 2b 規劃，含 Iceberg sink 與 Silver 讀 Bronze）
+- [x] (承接 Session 021 Next Step) 重新定義「Pattern 封裝成 Skill」的處理方式：移除 `docs/TODO.md` 該項目，改在 `docs/patterns/overview.md` 最上方寫下規則（使用者沒主動提出時，既有 pattern 被重複使用達 3 次就詢問是否封裝成 skill），並新增 PostToolUse(Read) hook [track-pattern-usage.sh](../../.claude/hooks/track-pattern-usage.sh)（已註冊於 `.claude/settings.json`，`.gitignore` 新增 `.claude/state/`）：以「讀過該 Pattern Card 的不同 session 數」近似使用次數，記錄於本機 `.claude/state/pattern-usage.json`，累計達 3 次時對該卡只提醒一次。已用合成 payload pipe-test 驗證：同 session 重複讀取去重、`overview.md` 與非 pattern 檔忽略、第 3 個 session 觸發且之後不再觸發、interrupted 的呼叫忽略
+
+### Related ADRs
+
+- [ADR-0012](../../docs/architecture/adr/0012-kafka-connect-iceberg-sink-bronze.md)：Slice 2b 的 Kafka → Bronze 改由 Iceberg Kafka Connect sink 負責（💬 Proposed）
+
+### Next Steps
+
+- [ ] （承接 Session 021）把 Pattern Card [msk-connect-single-plugin-per-connector.md](../../docs/patterns/msk-connect-single-plugin-per-connector.md) 封裝成 skill，且**必須在 Slice 2b spike 之前完成**，因為 spike 要用它打包 Iceberg sink + Glue SR converter 的合併 plugin；其他 Pattern 依 `docs/patterns/overview.md` 的機制處理（累計達 3 次由 hook 提醒後再詢問）
+- [ ] 下次要重新建置 Slice 2a 的架構（Slice 2 stack 目前為已銷毀狀態，依 [slice2-stack-lifecycle.md](../../docs/runbooks/slice2-stack-lifecycle.md) 三階段冷啟動，topic 內容需重新用 generator 產生），並執行 Slice 2b 的 spike（spec §4 項目 1 的 (a) Iceberg sink on MSK Connect 與 (b) Glue Streaming 讀 Bronze 並 `MERGE INTO`，加上附帶的三項 LSN 實測與 2a 證據缺口補查，其中 (a) 的 plugin 打包使用上一項完成的 skill）；spike 通過後將 ADR-0012 轉為 Accepted，不通過則回到 ADR-0010 原設計並將 ADR-0012 標為 Rejected
+- [ ] `track-pattern-usage.sh` 的 hook 註冊要開新 session 才會載入，下次實際讀 Pattern Card 時順便確認 `.claude/state/pattern-usage.json` 有被建立與累計
+
+### Notes
+
+> Slice 2b 把 Kafka → Bronze 交給託管 connector，是為了把「Glue × 私有子網 MSK × Glue SR 解碼」這組最大的未知項移出關鍵路徑，並讓擷取與解讀分屬不同故障域（Silver 出問題不阻擋事件落地）；LSN 排序、軟刪除、逐筆規則與隔離表完全不變。`Design` 的 `pipeline` 頁 ④ 已有完整架構圖（含 Slice 2b 規劃）可供開發期間參照，該圖座標未經實際渲染驗證，開啟後若有重疊或穿線請直接微調。pattern 使用次數的 hook 是以「讀取」近似「使用」，讀過不等於實際套用，只當作詢問封裝 skill 的觸發訊號，不是精確計數。
+

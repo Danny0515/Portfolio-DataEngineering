@@ -48,7 +48,7 @@ FROM silver.stock WHERE symbol = '<symbol>' ORDER BY trade_date LIMIT 3;
 -- 筆數：應該等於 generator 產生的 (symbol 數 × 交易日數) 總列數
 SELECT COUNT(*) AS bronze_count FROM bronze.stock;
 
--- Schema 應該全部是 string（inferSchema=false 的設計，見 ADR-0002 / arc42 08_concepts.md §8.2）
+-- Schema 應該全部是 string（inferSchema=false 的設計，見 ADR-0002 / arc42 08_concepts.md §8.1.1）
 DESCRIBE bronze.stock;
 ```
 
@@ -79,7 +79,7 @@ FROM silver.stock
 GROUP BY symbol, trade_date
 HAVING COUNT(*) > 1;
 
--- 5. Schema 檢查：確認型別是 decimal/date/int，不是字串（Silver 負責 100% 型別解析，見 arc42 08_concepts.md §8.3）
+-- 5. Schema 檢查：確認型別是 decimal/date/int，不是字串（Silver 負責 100% 型別解析，見 arc42 08_concepts.md §8.1.2）
 DESCRIBE silver.stock;
 
 -- 6. 抽樣看資料
@@ -110,7 +110,7 @@ FROM gold.monthly_ohlcv
 GROUP BY symbol
 ORDER BY symbol;
 
--- 2. Schema 檢查（月頻聚合，見 arc42 08_concepts.md §8.4）
+-- 2. Schema 檢查（月頻聚合，見 arc42 08_concepts.md §8.1.3）
 DESCRIBE gold.monthly_ohlcv;
 
 -- 3. 抽樣看資料

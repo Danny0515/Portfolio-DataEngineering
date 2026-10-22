@@ -7,6 +7,8 @@
 | **相關模組** | Slice 2b 串流運算（尚未實作；將位於 `infra/environments/dev-slice2/` 與 `src/transform/`） |
 | **決策者** | Danny |
 
+> **範圍註記**：Glue Streaming 的職責範圍已由 [ADR-0012](0012-kafka-connect-iceberg-sink-bronze.md)（💬 `Proposed`）縮小為「Bronze → Silver」，Kafka → Bronze 改由 Iceberg Kafka Connect sink 負責；本 ADR 對「Glue Streaming 優於 Managed Flink」的結論不變。若 ADR-0012 的 spike 不通過，則維持下方的原設計。
+
 ## 背景 (Context)
 
 Slice 2b 要把 2a 送進 Kafka 的 CDC 事件落進 Iceberg：`bronze.trade_events` append、`silver.trade` 以 `MERGE INTO` 維護當前狀態。plan.md §2.3／§8 將 Managed Flink 列為串流運算主選、Spark Structured Streaming 列為替代，spec §3.1 原建議選 Flink、Glue Streaming 作為卡關時的降級方案。討論過程中查到的事實，改變了原本的取捨：

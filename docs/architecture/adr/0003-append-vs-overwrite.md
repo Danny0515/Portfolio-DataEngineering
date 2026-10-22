@@ -9,7 +9,7 @@
 
 ## 背景 (Context)
 
-execution-roadmap.md 把「這裡為什麼用 append（不 upsert）？」與「partition 怎麼切？」都列為 Slice0 必須交代清楚的 DE 判斷（見 §2 Slice 0 段落），spec §9 也明確要求一份正式 ADR 記錄 append vs overwrite 的取捨（本文件之前只在 `docs/arc42/08_concepts.md` §8.5、程式碼註解裡非正式地寫過）。這份 ADR 把散落各處的理由收斂成一份正式決策紀錄，不是重新做決策。
+execution-roadmap.md 把「這裡為什麼用 append（不 upsert）？」與「partition 怎麼切？」都列為 Slice0 必須交代清楚的 DE 判斷（見 §2 Slice 0 段落），spec §9 也明確要求一份正式 ADR 記錄 append vs overwrite 的取捨（本文件之前只在 `docs/arc42/08_concepts.md` §8.2、程式碼註解裡非正式地寫過）。這份 ADR 把散落各處的理由收斂成一份正式決策紀錄，不是重新做決策。
 
 Bronze/Silver/Gold 三層目前的實際寫入行為並不一致：Bronze 是字面上的 Spark `.append()`；Silver/Gold 是每次全量讀取來源層、處理後用 `createOrReplace()` 整表覆寫。這個不一致是刻意設計，不是疏漏，需要明確記錄下來，避免之後的開發者（或 Slice 2 開始做 CDC upsert 時）誤以為三層寫入邏輯應該統一。
 
