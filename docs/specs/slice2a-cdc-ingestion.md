@@ -78,6 +78,8 @@
 | B. AWS DMS | 全代管，設定簡單 | 訊息格式非 Debezium 標準、可控性低，展示價值較弱 |
 | C. Debezium Server / Kafka Connect 自架於 EC2 或 ECS | 完全可控、可省 MSK Connect 費用 | 要自己顧容器與重啟，維運成本轉嫁到自己身上 |
 
+**補遺（2026-10-30，閒置時的 replication slot 防護）**：Debezium 的 replication slot 只有在處理到被擷取資料表（`public.trade`）的變更時才會前進，而 RDS 閒置時每 5 分鐘仍產生一個 64MB 的 WAL 段，因此原設計在整體閒置時會讓 WAL 累積直到 RDS 儲存寫滿。connector 設定因此補上 **heartbeat**（`heartbeat.interval.ms=60000`，`heartbeat.action.query` 每次寫入心跳表 `debezium_heartbeat`），RDS parameter group 補上 **`max_slot_wal_keep_size=10240`** 作為保險絲。決策與實測見 [ADR-0013](../architecture/adr/0013-debezium-heartbeat-and-slot-wal-cap.md)；不改變 §7 驗收標準。
+
 ### 3.3 Kafka 佈署形態與資源生命週期
 
 本片是專案第一次出現**常駐計費資源**（Slice 0/1 的 S3/Glue/Athena 幾乎是用多少算多少）。兩件事要一起拍板：

@@ -12,3 +12,12 @@
 - **症狀**：Lambda 執行時 `ImportModuleError: No module named 'orjson.orjson'`
 - **根因**：`orjson`（`aws-glue-schema-registry` 的間接依賴）是編譯過的 Rust extension，本機 macOS 打包抓到 macOS 版 wheel，Lambda（Amazon Linux x86_64）載入不了
 - **對應**：[docs/specs/slice2a-cdc-ingestion.md](../specs/slice2a-cdc-ingestion.md) §4 項目 8；[infra/environments/dev-slice2/msk_event_verifier.tf](../../infra/environments/dev-slice2/msk_event_verifier.tf)
+
+---
+
+## RDS 儲存被閒置的 replication slot 寫滿（connector 顯示 RUNNING 但 task 已死）
+
+- **檔案**：[rds-storage-full-idle-replication-slot.md](rds-storage-full-idle-replication-slot.md)
+- **症狀**：generator 連不上 RDS 5432、RDS `storage-full`／`PANIC`；`describe-connector` 仍是 `RUNNING` 但 worker log 有 `Broken pipe`
+- **根因**：RDS 閒置也每 5 分鐘產生 64MB WAL，而 Debezium 沒有 heartbeat 時 slot 不前進，WAL 一路累積寫滿磁碟（connector 在線但閒置同樣會發生）
+- **對應**：[ADR-0013](../architecture/adr/0013-debezium-heartbeat-and-slot-wal-cap.md)；[infra/environments/dev-slice2/msk_connector.tf](../../infra/environments/dev-slice2/msk_connector.tf)、[rds.tf](../../infra/environments/dev-slice2/rds.tf)

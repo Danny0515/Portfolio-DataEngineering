@@ -136,7 +136,7 @@ def run_ddl(conn) -> None:
     conn.commit()
 
 
-def execute_operation(conn, operation: str, row: dict) -> None:
+def execute_operation(conn, operation: str, row: dict, commit: bool = True) -> None:
     with conn.cursor() as cur:
         if operation == "INSERT":
             cur.execute(
@@ -161,7 +161,35 @@ def execute_operation(conn, operation: str, row: dict) -> None:
             cur.execute("DELETE FROM trade WHERE trade_id = %s", (row["trade_id"],))
         else:
             raise ValueError(f"Unknown operation: {operation}")
-    conn.commit()
+    if commit:
+        conn.commit()
+
+
+def generate_multi_update_tx(conn, seed: int) -> dict:
+    """Slice 2b spike helper: apply a full order lifecycle (INSERT + several UPDATEs) to
+    ONE trade inside a SINGLE transaction, so the CDC events share one commit. Used to
+    check whether Debezium's source.lsn differs across changes within one transaction
+    (docs/specs/slice2b-streaming-upsert.md §4 item 1). Not part of the normal flow."""
+    rng = random.Random(seed)
+    trade_id = f"T{int(time.time())}-TX00"
+    operations = [
+        ("INSERT", None),
+        ("UPDATE", "PARTIALLY_FILLED"),
+        ("UPDATE", "PARTIALLY_FILLED"),
+        ("UPDATE", "FILLED"),
+    ]
+    base_ops, _ = generate_trade_lifecycle(rng, trade_id, 0.0)
+    row = dict(base_ops[0][1])
+    try:
+        for operation, status in operations:
+            if status:
+                row = {**row, "status": status, "updated_at": _now()}
+            execute_operation(conn, operation, row, commit=False)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    return {"multi_update_tx": trade_id, "changes_in_one_transaction": len(operations)}
 
 
 def summarize(conn) -> dict:
@@ -220,6 +248,56 @@ def fetch_rows(conn, limit: int) -> list:
         return rows
 
 
+def diagnose_replication(conn) -> dict:
+    """Read-only diagnostic (Slice 2b spike, WAL growth investigation): replication slot
+    positions, current WAL position, walsender sessions and the oldest open transactions.
+    The RDS instance is private, so this Lambda is the only way to run these SELECTs."""
+    queries = {
+        "slots": """
+            SELECT slot_name, plugin, slot_type, active, active_pid, xmin::text, catalog_xmin::text,
+                   restart_lsn::text, confirmed_flush_lsn::text, wal_status, safe_wal_size,
+                   pg_current_wal_lsn()::text AS current_lsn,
+                   pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn) AS retained_bytes,
+                   pg_wal_lsn_diff(pg_current_wal_lsn(), confirmed_flush_lsn) AS unconfirmed_bytes
+            FROM pg_replication_slots
+        """,
+        "walsenders": """
+            SELECT pid, state, sent_lsn::text, write_lsn::text, flush_lsn::text, replay_lsn::text
+            FROM pg_stat_replication
+        """,
+        "oldest_transactions": """
+            SELECT pid, datname, state, xact_start::text, backend_xid::text, backend_xmin::text,
+                   left(query, 80) AS query
+            FROM pg_stat_activity
+            WHERE xact_start IS NOT NULL
+            ORDER BY xact_start LIMIT 5
+        """,
+        "settings": """
+            SELECT name, setting FROM pg_settings
+            WHERE name IN ('max_slot_wal_keep_size', 'wal_keep_size', 'archive_timeout', 'wal_segment_size')
+        """,
+        # pgoutput only streams tables that are in the publication; the heartbeat table must
+        # be reachable for the heartbeat write to advance the slot.
+        "publications": "SELECT pubname, puballtables, pubinsert, pubupdate, pubdelete FROM pg_publication",
+        "publication_tables": "SELECT pubname, schemaname, tablename FROM pg_publication_tables",
+    }
+    result = {}
+    with conn.cursor() as cur:
+        for name, sql in queries.items():
+            cur.execute(sql)
+            cols = [d[0] for d in cur.description]
+            result[name] = [dict(zip(cols, [str(v) if v is not None else None for v in row])) for row in cur.fetchall()]
+        # The heartbeat table only exists after init_schema has run, so probe it separately.
+        cur.execute("SELECT to_regclass('public.debezium_heartbeat') IS NOT NULL")
+        if cur.fetchone()[0]:
+            cur.execute("SELECT id, ts::text, now()::text AS db_now FROM debezium_heartbeat")
+            cols = [d[0] for d in cur.description]
+            result["heartbeat"] = [dict(zip(cols, [str(v) if v is not None else None for v in row])) for row in cur.fetchall()]
+        else:
+            result["heartbeat"] = "table debezium_heartbeat does not exist"
+    return result
+
+
 def get_connection():
     return pg8000.connect(
         user=os.environ["DB_USER"],
@@ -240,6 +318,10 @@ def lambda_handler(event, context):
             return {"init_schema": "done"}
         if event.get("query"):
             return {"rows": fetch_rows(conn, event.get("limit", 10))}
+        if event.get("diagnose_replication"):
+            return diagnose_replication(conn)
+        if event.get("multi_update_tx"):
+            return generate_multi_update_tx(conn, seed=event.get("seed", 42))
         result = generate(
             conn,
             num_trades=event.get("num_trades", 10),

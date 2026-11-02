@@ -166,7 +166,7 @@ resource "aws_mskconnect_connector" "debezium_postgres" {
 
   connector_configuration = {
     "connector.class" = "io.debezium.connector.postgresql.PostgresConnector"
-    "tasks.max"        = "1"
+    "tasks.max"       = "1"
 
     "database.hostname" = aws_db_instance.trade.address
     "database.port"     = tostring(aws_db_instance.trade.port)
@@ -178,6 +178,14 @@ resource "aws_mskconnect_connector" "debezium_postgres" {
     "plugin.name"        = "pgoutput"
     "slot.name"          = "slice2_trade_slot"
     "table.include.list" = "public.trade"
+
+    # 閒置時讓 replication slot 持續前進：RDS 即使沒流量也每 5 分鐘切一個 64MB WAL 段，
+    # 但 slot 只有在 Debezium 處理到被擷取資料表的變更後才會前進，沒有 heartbeat 就會
+    # 一路保留 WAL 直到磁碟寫滿（見 docs/runbooks/slice2b-iceberg-sink-spike-verification.md）。
+    # action query 必須是真的寫入（SELECT 1 不產生 WAL，不會推進 slot）；心跳表刻意不放進
+    # table.include.list，不需要被擷取成業務事件。
+    "heartbeat.interval.ms"  = "60000"
+    "heartbeat.action.query" = "INSERT INTO debezium_heartbeat (id, ts) VALUES (1, NOW()) ON CONFLICT (id) DO UPDATE SET ts = EXCLUDED.ts"
 
     # Debezium 預設 topic 命名是 <topic.prefix>.<schema>.<table>，會產生
     # transaction.public.trade，不是 spec §5 已承諾的 transaction.trade.v1；
@@ -194,10 +202,10 @@ resource "aws_mskconnect_connector" "debezium_postgres" {
     "value.converter"                               = "com.amazonaws.services.schemaregistry.kafkaconnect.AWSKafkaAvroConverter"
     "value.converter.region"                        = var.aws_region
     "value.converter.registry.name"                 = aws_glue_registry.trade_events.registry_name
-    "value.converter.schemaAutoRegistrationEnabled"  = "true"
-    "value.converter.avroRecordType"                 = "GENERIC_RECORD"
+    "value.converter.schemaAutoRegistrationEnabled" = "true"
+    "value.converter.avroRecordType"                = "GENERIC_RECORD"
 
-    "errors.tolerance"                               = "all"
+    "errors.tolerance"                                = "all"
     "errors.deadletterqueue.topic.name"               = "transaction.trade.v1.dlq"
     "errors.deadletterqueue.topic.replication.factor" = "2"
     "errors.deadletterqueue.context.headers.enable"   = "true"

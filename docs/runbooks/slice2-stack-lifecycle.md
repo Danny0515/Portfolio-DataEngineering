@@ -85,6 +85,8 @@ terraform destroy
 
 **整組一起拆，不要挑資源刪**：依 [ADR-0007](../architecture/adr/0007-cdc-vs-batch-polling.md)「⚠️ 注意」段落，Debezium 的 replication slot（`slice2_trade_slot`）若 consumer 長時間離線會持續累積 WAL、佔用來源 DB 儲存空間；這組資源刻意設計成 RDS 隨整個 `terraform destroy` 一起銷毀，slot 隨 instance 一起消失，不會留下孤兒 slot，不需要額外手動清理。
 
+**閒置不再需要趕著拆**：除了「consumer 離線」，connector 在線但整體閒置時 slot 也會累積 WAL（RDS 閒置每 5 分鐘仍產生 64MB），過去因此在約 32 小時內把 20GB 寫滿。現在 [ADR-0013](../architecture/adr/0013-debezium-heartbeat-and-slot-wal-cap.md) 的兩層保護已部署：Debezium heartbeat（每 60 秒寫 `debezium_heartbeat`，讓 slot 閒置時持續前進）與 RDS `max_slot_wal_keep_size=10240`（保險絲）。**重建 stack 時 `init_schema` 必須在 connector 建立前執行**，否則心跳表不存在，heartbeat 的 action query 預期會失敗（未實測，原本的建立流程階段二就是先 `init_schema` 再建 connector，順序不變即可）。成本考量的「用完即拆」不變。
+
 **銷毀後不會自動清掉、但成本可忽略的殘留**：兩支 Lambda（`slice2-trade-generator`、`slice2-cdc-event-verifier`）的 CloudWatch Log Group（`/aws/lambda/<function-name>`）是 AWS 自動建立，不在 Terraform state 裡，`destroy` 不會刪除。低流量下儲存成本可忽略，非必要不用管；真的要清乾淨可手動：
 
 ```bash
@@ -122,6 +124,7 @@ aws logs delete-log-group --log-group-name /aws/lambda/slice2-cdc-event-verifier
 | `terraform plan` 對兩個大型 MSK Connect plugin 的 `aws_s3_object` 一直顯示 etag 差異，即使剛 apply 完 | 已知、跟內容變動無關的既存現象：這兩個 zip（~58MB）超過 S3 multipart 上傳門檻，Terraform 用整檔 MD5 跟 S3 的 multipart ETag 格式天生比不出「相等」 | 不影響功能，忽略即可；不要為了讓 plan 乾淨而反覆 apply，不會收斂 |
 | `terraform apply` 建立 RDS 時報 `InsufficientDBInstanceCapacity`（`db.t4g.micro` 在這個 VPC 的 AZ 沒有足夠容量） | AWS 端暫時性容量不足，非設定問題——2026-10-02 實測遇過一次 | 直接重跑同一個 `terraform apply` 指令即可，通常很快就能排到容量；不需要改機型或換 AZ |
 | 執行中的 `terraform apply`／`destroy` 被中斷（本機工具的長時間執行限制、網路斷線等），後續指令報 `Error acquiring the state lock` | 被中斷的指令沒能正常釋放 state lock | 先用 `ps aux \| grep terraform` 確認真的沒有其他 terraform 行程在跑，再執行 `terraform force-unlock -force <lock-id>`（lock ID 會在錯誤訊息裡）；**此操作有風險，執行前務必先排除真的有併發操作在跑的可能性** |
+| `describe-connector` 顯示 `RUNNING`，但 generator 連不上 RDS，或 CDC 事件停止產生、worker log 有 `Broken pipe` | RDS 儲存被 replication slot 保留的 WAL 寫滿（`storage-full`）而當機，Debezium task 隨之死亡，但 connector 層級狀態不會變 | 見 [rds-storage-full-idle-replication-slot.md](../troubleshooting/rds-storage-full-idle-replication-slot.md)；用 generator 的 `{"diagnose_replication": true}` 看 slot 的 `retained_bytes`／`wal_status`。`wal_status=lost` 表示超過 `max_slot_wal_keep_size` 被作廢，需重建 connector 並重新 snapshot |
 | 上面那種中斷發生在 `aws_mskconnect_connector` 建立中途——AWS 其實已經真的在建立（可用 `aws kafkaconnect list-connectors` 查到 `CREATING`／`RUNNING`），但本機 `terraform state list` 查不到這個資源 | Terraform CLI 被中斷時，連線器剛送出 `CreateConnector` 請求、還沒等到結果就被取消，AWS 端的建立不會因此停止，但本機 state 沒記到 | 等 AWS 端狀態穩定（`RUNNING` 或 `FAILED`）後，用 `terraform import aws_mskconnect_connector.debezium_postgres <connector-arn>` 把它接回 state，再跑一次 `terraform plan` 確認沒有意外差異（這次實測接回後只剩 `database.password` 敏感度標記這種無害的 in-place update） |
 | `terraform destroy` 銷毀子網路／Security Group 時卡很久（正常應該幾秒內完成，卻跑了幾分鐘還沒結束） | 掛 VPC 的 Lambda（`trade_generator`／`cdc_event_verifier`）被刪除後，其 ENI 會先進入 `available`（已卸載、尚未釋放）狀態一段時間才被 AWS 自動回收，期間會卡住所屬子網路／SG 的刪除——2026-10-02 實測卡了將近 10 分鐘 | 用 `aws ec2 describe-network-interfaces --filters "Name=vpc-id,Values=<vpc-id>"` 確認是否有 `available` 狀態的殘留 ENI，若有可直接 `aws ec2 delete-network-interface --network-interface-id <eni-id>` 手動刪除加速，不需要死等 AWS 自動回收 |
 
@@ -131,6 +134,8 @@ aws logs delete-log-group --log-group-name /aws/lambda/slice2-cdc-event-verifier
 
 - [docs/specs/slice2a-cdc-ingestion.md](../specs/slice2a-cdc-ingestion.md) §3.3(b)、§4 項目 10、§7 — 對應的決策與驗收標準
 - [ADR-0007](../architecture/adr/0007-cdc-vs-batch-polling.md) — CDC 選型與 replication slot 注意事項（「⚠️ 注意」段落）
+- [ADR-0013](../architecture/adr/0013-debezium-heartbeat-and-slot-wal-cap.md) — 閒置時 slot 的 WAL 累積對策（heartbeat + `max_slot_wal_keep_size`）
+- [rds-storage-full-idle-replication-slot.md](../troubleshooting/rds-storage-full-idle-replication-slot.md) — RDS 被 WAL 寫滿的故障排除
 - [slice2-network-layer-verification.md](slice2-network-layer-verification.md) — 網路層驗證
 - [slice2-cdc-event-verification.md](slice2-cdc-event-verification.md) — CDC 事件／Schema 相容性／DLQ 驗證
 - [ai/contexts/infra_dev_slice2.md](../../ai/contexts/infra_dev_slice2.md) — 目前實際部署狀態快照

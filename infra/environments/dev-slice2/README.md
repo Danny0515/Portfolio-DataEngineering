@@ -4,7 +4,7 @@
 >
 > 這是「原始碼意圖」的轉譯，不是部署現況——實際 resource ID／endpoint／密碼等 apply 後才產生的值，見 [ai/contexts/infra_dev_slice2.md](../../../ai/contexts/infra_dev_slice2.md)。
 
-**最後轉譯**：2026-09-16
+**最後轉譯**：2026-10-30
 **來源**：`infra/environments/dev-slice2/*.tf`（12 個檔案）
 
 ## 這個環境在做什麼
@@ -127,11 +127,13 @@
 
 - **引擎版本**：PostgreSQL 16
 - **規格**：`db.t4g.micro`（最小可用規格，cost-conscious lab 環境）
-- **儲存**：20GB gp3
+- **儲存**：30GB gp3（原 20GB）。Slice 2b spike 時發現 replication slot 在整體閒置時仍會保留 RDS 自己產生的 WAL（實測約 0.75GB／小時），約 1 天就把 20GB 寫滿（`storage-full`）而加大；加大只是延後、不是根治，根治靠下面「CDC／複寫設定」的兩層防護
+- **套用時機**：`apply_immediately=true`，變更不等維護時段（當初是儲存已滿、需要立即套用）
 
 ### 2. CDC／複寫設定
 
 - **Logical Replication**：透過專屬 parameter group（`slice2-trade-pg16`）開啟 `rds.logical_replication=1`——這是 Debezium CDC 擷取的前提；因為 instance 建立當下就掛上這個 parameter group，不會遇到「改參數要重開機」的問題
+- **WAL 保留上限（保險絲）**：同一個 parameter group 設定 `max_slot_wal_keep_size=10240`（MB，約 10GB），搭配 `msk_connector.tf` 的 Debezium heartbeat 使用。萬一 heartbeat 失效或 connector 長期離線，replication slot 超過上限時會被作廢（`wal_status=lost`），而不是把磁碟寫滿、讓整個資料庫當機；代價是作廢後 Debezium 需重建 slot 並重新 snapshot，期間事件會遺失。這是動態參數（`apply_method=immediate`），不需重開機。決策見 [ADR-0013](../../../docs/architecture/adr/0013-debezium-heartbeat-and-slot-wal-cap.md)
 
 ### 3. 安全與存取控制
 
@@ -149,15 +151,18 @@
 | --- | --- |
 | 密碼在哪裡拿？ | 部署後才決定的隨機值，直接寫進 `aws_lambda_function.trade_generator` 的環境變數，不查 Secrets Manager |
 | 這個 DB 可以直接用 psql 連嗎？ | 不行，沒有對外網路，只能透過 VPC 內的 Lambda 存取 |
+| stack 閒置時 RDS 會被 WAL 填滿嗎？ | 現在不會：`msk_connector.tf` 的 heartbeat 讓 replication slot 閒置也前進，本檔的 `max_slot_wal_keep_size` 是最後一道保險；可用 generator 的 `{"diagnose_replication": true}` 檢查 slot 保留量 |
 
 **對照表（原始碼出處）**
 
 | 主題 | 項目 | 資源 | 出處 |
 | --- | --- | --- | --- |
-| 規格與儲存 | 引擎、規格、儲存 | `aws_db_instance.trade` | [rds.tf:31-53](rds.tf#L31-L53) |
-| CDC／複寫設定 | logical replication | `aws_db_parameter_group.trade` | [rds.tf:17-29](rds.tf#L17-L29) |
-| 安全與存取控制 | 密碼產生、SG | `random_password.trade_db`、`aws_db_instance.trade.vpc_security_group_ids` | [rds.tf:7-10](rds.tf#L7-L10), [rds.tf:45](rds.tf#L45) |
-| 生命週期策略 | multi_az／快照／刪除保護 | `aws_db_instance.trade` | [rds.tf:49-52](rds.tf#L49-L52) |
+| 規格與儲存 | 引擎、規格、儲存 | `aws_db_instance.trade` | [rds.tf:42-54](rds.tf#L42-L54) |
+| 規格與儲存 | 套用時機 | `aws_db_instance.trade.apply_immediately` | [rds.tf:56-57](rds.tf#L56-L57) |
+| CDC／複寫設定 | Logical Replication | `aws_db_parameter_group.trade` | [rds.tf:17-28](rds.tf#L17-L28) |
+| CDC／複寫設定 | WAL 保留上限（保險絲） | `aws_db_parameter_group.trade` | [rds.tf:30-39](rds.tf#L30-L39) |
+| 安全與存取控制 | 密碼產生、SG | `random_password.trade_db`、`aws_db_instance.trade.vpc_security_group_ids` | [rds.tf:7-10](rds.tf#L7-L10), [rds.tf:64](rds.tf#L64) |
+| 生命週期策略 | multi_az／快照／刪除保護 | `aws_db_instance.trade` | [rds.tf:67-71](rds.tf#L67-L71) |
 
 <a id="lambda-tf"></a>
 ## `lambda.tf` — 交易資料 generator
@@ -316,6 +321,7 @@
 
 - **來源**：Postgres 邏輯複寫（`plugin.name=pgoutput`），監看 `public.trade` 單一資料表，複寫槽 `slice2_trade_slot`
 - **Topic 命名**：Debezium 預設命名是 `<topic.prefix>.<schema>.<table>`（會產生 `transaction.public.trade`），不是規格書承諾的 `transaction.trade.v1`——用 `RegexRouter` SMT 在序列化前改名
+- **Heartbeat（防止閒置時 WAL 累積）**：`heartbeat.interval.ms=60000`，每 60 秒執行一次 `heartbeat.action.query`，對心跳表 `debezium_heartbeat` upsert 一列。原因：RDS 即使沒流量也每 5 分鐘產生一個 64MB 的 WAL 段，而複寫槽只有在 Debezium 處理到被擷取資料表的變更後才會前進，沒有 heartbeat 就會一路保留 WAL 直到磁碟寫滿。query 必須是真的寫入（`SELECT 1` 不產生 WAL，推不動複寫槽）；心跳表刻意不放進 `table.include.list`，不產生業務事件。心跳訊息會寫進 `__debezium-heartbeat.transaction` topic，不會進 Bronze。心跳表的 DDL 在 `src/ingestion/sql/create_trade_table.sql`，**`init_schema` 要在 connector 建立前執行**。決策見 [ADR-0013](../../../docs/architecture/adr/0013-debezium-heartbeat-and-slot-wal-cap.md)；對應的 RDS 保險絲設定在 `rds.tf`
 - **Key／Value 序列化**：key 用純字串（`StringConverter`，判斷取捨、非定案——2b 若需要直接解析 key 的結構化欄位再回頭改成 Avro）；value 用 `AWSKafkaAvroConverter`（Glue Schema Registry），開啟自動註冊 schema
 - **錯誤處理／DLQ**：`errors.tolerance=all`——序列化失敗的訊息轉進 `transaction.trade.v1.dlq`（複本數 2、附帶錯誤 context header），不阻塞主流程
 
@@ -334,8 +340,9 @@
 | 合併版 Plugin 打包 | 下載與打包 | `null_resource.build_debezium_combined_plugin`、`aws_mskconnect_custom_plugin.debezium_combined` | [msk_connector.tf:22-67](msk_connector.tf#L22-L67) |
 | IAM 執行角色與權限 | 信任政策、權限政策 | `aws_iam_role.msk_connect_debezium`、`data.aws_iam_policy_document.msk_connect_permissions` | [msk_connector.tf:74-152](msk_connector.tf#L74-L152) |
 | Connector 容量與叢集連線 | 容量、版本 | `aws_mskconnect_connector.debezium_postgres.capacity` | [msk_connector.tf:154-166](msk_connector.tf#L154-L166) |
-| Connector 容量與叢集連線 | 叢集連線設定 | `kafka_cluster`／`kafka_cluster_client_authentication`／`kafka_cluster_encryption_in_transit` | [msk_connector.tf:206-225](msk_connector.tf#L206-L225) |
-| Debezium 擷取設定與資料流 | connector_configuration 全部設定 | `aws_mskconnect_connector.debezium_postgres.connector_configuration` | [msk_connector.tf:167-204](msk_connector.tf#L167-L204) |
+| Connector 容量與叢集連線 | 叢集連線設定 | `kafka_cluster`／`kafka_cluster_client_authentication`／`kafka_cluster_encryption_in_transit` | [msk_connector.tf:214-233](msk_connector.tf#L214-L233) |
+| Debezium 擷取設定與資料流 | connector_configuration 全部設定 | `aws_mskconnect_connector.debezium_postgres.connector_configuration` | [msk_connector.tf:167-212](msk_connector.tf#L167-L212) |
+| Debezium 擷取設定與資料流 | Heartbeat（防止閒置時 WAL 累積） | `connector_configuration` 的 `heartbeat.*` | [msk_connector.tf:180-188](msk_connector.tf#L180-L188) |
 
 <a id="msk_event_verifier-tf"></a>
 ## `msk_event_verifier.tf` — CDC 事件驗證 Lambda

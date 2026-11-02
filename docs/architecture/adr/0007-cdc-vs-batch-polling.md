@@ -30,5 +30,5 @@ Slice 2a 採用 CDC（Debezium + PostgreSQL logical replication）擷取交易�
 ## 影響 (Consequences)
 
 - ✅ **正面**：達成 Slice 2「不輪詢來源表」的目標（§1），且能完整展示交易狀態機的每一次變更軌跡，是 CDC 相對 batch polling 最有說服力的差異化展示。
-- ⚠️ **注意**：CDC 依賴來源資料庫的 replication slot 機制，若 consumer（Debezium connector）長時間離線未消費，replication slot 會持續累積 WAL、佔用來源 DB 儲存空間——這也是為什麼 §3.3(b) 選擇「用完即拆」時，網路層/RDS/MSK 要整組一起拆建，避免留下孤兒 replication slot。
+- ⚠️ **注意**：CDC 依賴來源資料庫的 replication slot 機制，若 consumer（Debezium connector）長時間離線未消費，replication slot 會持續累積 WAL、佔用來源 DB 儲存空間——這也是為什麼 §3.3(b) 選擇「用完即拆」時，網路層/RDS/MSK 要整組一起拆建，避免留下孤兒 replication slot。**補充（2026-10-30）**：不只 consumer 離線，connector 在線但整體閒置時 slot 也會累積 WAL（RDS 閒置每 5 分鐘仍產生 64MB），約 32 小時就能寫滿 20GB；對策見 [ADR-0013](0013-debezium-heartbeat-and-slot-wal-cap.md)（Debezium heartbeat + `max_slot_wal_keep_size`）。
 - ❌ **負面/限制**：CDC 的實作複雜度明顯高於 batch polling——需要開啟 logical replication、處理 Debezium plugin 部署（§4 項目 6 的獨立 spike）、管理 replication slot 生命週期；相較之下 batch polling 只需要一支排程 script 定期下 SQL 查詢。

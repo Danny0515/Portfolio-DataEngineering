@@ -27,3 +27,4 @@
 | [ADR-0010](../architecture/adr/0010-glue-streaming-vs-managed-flink.md) | Slice 2b 串流運算選 Glue Streaming，不選 Managed Flink | ✅ `Accepted` |
 | [ADR-0011](../architecture/adr/0011-streaming-silver-quality-gate.md) | 串流 Silver 的品質閘：Registry 管結構、Silver 管值，逐筆規則加隔離 | ✅ `Accepted` |
 | [ADR-0012](../architecture/adr/0012-kafka-connect-iceberg-sink-bronze.md) | Slice 2b 的 Kafka → Bronze 改由 Iceberg Kafka Connect sink 負責，Silver 由 Glue Streaming 讀 Bronze | 💬 `Proposed` |
+| [ADR-0013](../architecture/adr/0013-debezium-heartbeat-and-slot-wal-cap.md) | 以 Debezium heartbeat 與 `max_slot_wal_keep_size` 防止閒置時 replication slot 填滿來源 DB | ✅ `Accepted` |
