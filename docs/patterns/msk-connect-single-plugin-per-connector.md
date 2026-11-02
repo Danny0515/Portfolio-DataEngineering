@@ -3,7 +3,7 @@
 | 屬性 | 值 |
 | --- | --- |
 | **狀態** | ✅ Accepted |
-| **相關模組** | `infra/environments/dev-slice2/msk_connector.tf` |
+| **相關模組** | `infra/environments/dev-slice2/msk_connector.tf`、`.claude/skills/msk-connect-plugin/` |
 | **對應決策** | - |
 | **決策者** | Danny |
 
@@ -23,10 +23,15 @@ MSK Connect 的 `CreateConnector` API，`plugins` 參數只接受**恰好一個�
 
 ## 如何在未來重用此樣式
 
-現在只有一個 connector，`msk_connector.tf` 手寫死一段「下載＋合併＋打包＋註冊」的邏輯是合理的最小實作。**等真的要新增第二個 MSK Connect connector**（不管是另一個來源 DB、S3 Sink，或任何需要多個元件組合的情境），才是把這段邏輯抽成可重用 Terraform module 的時機——輸入是一份元件下載來源清單，輸出是一個 `aws_mskconnect_custom_plugin`；屆時可以把 S3 正式定位成「原子元件庫」（每個 connector 本體、每個 converter 各自存成獨立物件），由 module 依需求動態組裝，而不是像現在這樣每個 connector 各自重複整段打包邏輯。在只有一個 connector 的階段提前做這個抽象是過度工程，不建議現在就做。
+需要打包 plugin 時使用 [`msk-connect-plugin`](../../.claude/skills/msk-connect-plugin/SKILL.md) skill：依元件清單從範本產生該 connector 自己的「下載＋合併＋打包＋註冊」Terraform，並套用已實測的打包規則。
+
+本卡原先規劃在第二個 connector 出現時抽成可重用 Terraform module。Iceberg sink 是第二個 connector，但目前改以 skill 重用、**刻意不抽 module**：Debezium 與 sink 的 build 步驟差異大，只憑兩個案例設計共用介面容易失準；運行中的 Debezium 也不適合遷移，plugin 或 connector 被重建會遺失 offset 並重新 snapshot。代價是 Debezium 與 sink 各留一份打包邏輯，範本也不會自動同步到已產生的 `.tf`。
+
+**等第三個 MSK Connect connector 出現時再評估**是否抽 module——輸入是一份元件下載來源清單，輸出是一個 `aws_mskconnect_custom_plugin`；屆時可以把 S3 正式定位成「原子元件庫」（每個 connector 本體、每個 converter 各自存成獨立物件），由 module 依需求動態組裝。
 
 ## 相關文件
 
 - [infra/environments/dev-slice2/msk_connect_plugin.tf](../../infra/environments/dev-slice2/msk_connect_plugin.tf) 的修正註解
 - [infra/environments/dev-slice2/msk_connector.tf](../../infra/environments/dev-slice2/msk_connector.tf)
 - [docs/runbooks/slice2-msk-connect-plugin-packaging-verification.md](../runbooks/slice2-msk-connect-plugin-packaging-verification.md) 的修正段落
+- [.claude/skills/msk-connect-plugin/SKILL.md](../../.claude/skills/msk-connect-plugin/SKILL.md) 與其 Terraform 範本

@@ -790,3 +790,30 @@
 
 > 用 `-target` 銷毀資源不會清掉已從設定移除的 data source 與 root output，需另做 `state rm` 與 `apply -refresh-only`，下次移除整個 `.tf` 時可直接用 `-refresh-only` 收尾。清資料的順序是先銷毀 sink connector、再 DROP 表，否則開啟 auto-create 的 connector 可能把表重建。control topic、consumer group 與 spike 期間寫入 topic 的事件無法移除，只能隨 stack 銷毀（Slice 2 stack 依使用者決定持續運行）。
 
+---
+
+## Session 029 — 2026-11-02
+
+- **Engineer**: Danny
+- **Role**: Data Engineer
+- **LLM Used**: Claude Code (claude-opus-5-5)
+- **Module**: skills、docs/patterns
+
+### Completed
+
+- [x] (承接 Session 028 Next Step) 把 Pattern Card [msk-connect-single-plugin-per-connector.md](../../docs/patterns/msk-connect-single-plugin-per-connector.md) 封裝成 [`msk-connect-plugin`](../../.claude/skills/msk-connect-plugin/SKILL.md) skill：依元件清單從範本 [plugin-template.tf](../../.claude/skills/msk-connect-plugin/references/plugin-template.tf) 產生單一合併 plugin 的 Terraform，收錄已實測的打包規則、元件來源與部署注意事項；skill 只產生檔案，不執行 `terraform apply`。範本填入 Iceberg sink 的值後，在暫存目錄通過 `terraform fmt -check` 與 `terraform validate`，尚未實際部署
+- [x] 改寫 Pattern Card「如何在未來重用此樣式」：以 skill 為重用入口，原訂第二個 connector 抽 Terraform module 的規劃改為第三個 connector 出現時再評估；`docs/patterns/overview.md` 補上 skill 路徑。其他 Pattern 維持 hook 累計達 3 次再詢問
+- [x] (承接 Session 027 Next Step) 確認 `track-pattern-usage.sh` 運作：讀取 Pattern Card 後 `.claude/state/pattern-usage.json` 已建立並記錄本 session；跨 session 累計尚未驗證
+
+### Related ADRs
+
+- 無新增 ADR（不抽 module 的取捨已記錄於 Pattern Card，範圍僅限打包重用方式，不影響系統架構）
+
+### Next Steps
+
+- [ ] (延續 Session 027) Slice 2b 主線項目 2–9：正式 `bronze.trade_events`／`silver.trade`／`silver.trade_rejects` 的建表、規則檔 `silver_trade.yaml`、Silver 串流作業（可參考 `09f70e8` 的 `MERGE INTO` 寫法）
+
+### Notes
+
+> 不抽 module 的原因是 Debezium（tar.gz）與 Iceberg sink（zip、checksum、精簡 jar）的 build 步驟差異大，只憑兩個案例設計共用介面容易失準；運行中的 Debezium 也不適合遷移，plugin 或 connector 被重建會遺失 offset 並重新 snapshot。代價是兩份打包邏輯並存，範本也不會同步到已產生的 `.tf`，修正打包問題時要自行更新各處。
+

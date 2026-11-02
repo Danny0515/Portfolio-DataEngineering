@@ -22,4 +22,4 @@
 
 - **檔案**：[msk-connect-single-plugin-per-connector.md](msk-connect-single-plugin-per-connector.md)
 - **適用情境**：要幫同一個 MSK Connect connector 準備不只一個外部元件（connector 本體 + converter/SMT 等）時，一開始就規劃成單一 build 流程輸出一個合併 zip，不要先各自打包成多個獨立 custom plugin
-- **對應**：[infra/environments/dev-slice2/msk_connector.tf](../../infra/environments/dev-slice2/msk_connector.tf)
+- **對應**：[infra/environments/dev-slice2/msk_connector.tf](../../infra/environments/dev-slice2/msk_connector.tf)；[`msk-connect-plugin` skill](../../.claude/skills/msk-connect-plugin/SKILL.md)
