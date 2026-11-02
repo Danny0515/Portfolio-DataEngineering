@@ -12,6 +12,7 @@
 - [8.3 Partition 設計](#83-partition-設計)
 - [8.4 目前已實作的具體案例：Market Data / Stock（Slice0）](#84-目前已實作的具體案例market-data--stockslice0)
 - [8.5 與 ADR 的關係 / 尚未涵蓋的範圍](#85-與-adr-的關係--尚未涵蓋的範圍)
+- [8.6 Table 建立與 Schema 管控原則（依層級）](#86-table-建立與-schema-管控原則依層級)
 
 ---
 
@@ -29,7 +30,7 @@
 
 所有層都用同一套 Iceberg/Glue Catalog 設定執行（`glue_catalog`，見 [glue.tf](../../infra/environments/dev/glue.tf) 的 `local.iceberg_spark_conf`），PySpark 程式放在 `src/transform/`。
 
-**批次與串流（CDC）兩種形態**：三層的職責邊界相同，但來源與各層的實作不同。串流形態為 Slice 2b 的規劃（依 [ADR-0010](../architecture/adr/0010-glue-streaming-vs-managed-flink.md)、[ADR-0011](../architecture/adr/0011-streaming-silver-quality-gate.md)、[ADR-0012](../architecture/adr/0012-kafka-connect-iceberg-sink-bronze.md)，後者為 💬 `Proposed`），尚未實作：
+**批次與串流（CDC）兩種形態**：三層的職責邊界相同，但來源與各層的實作不同。串流形態為 Slice 2b 的規劃（依 [ADR-0010](../architecture/adr/0010-glue-streaming-vs-managed-flink.md)、[ADR-0011](../architecture/adr/0011-streaming-silver-quality-gate.md)、[ADR-0012](../architecture/adr/0012-kafka-connect-iceberg-sink-bronze.md)，後者為 ✅ `Accepted`），尚未實作：
 
 | 層級 | 批次（Slice 0/1，市場行情） | 串流（Slice 2b，交易資料，規劃中） |
 | --- | --- | --- |
@@ -44,7 +45,7 @@ Bronze 的型別策略因來源而異：批次來源是 CSV，沒有任何型別
 
 - **職責邊界**：只做 provenance 標記（`ingest_time`、`source_file`），不做任何有副作用的轉換（去重、過濾負值/空值等）、不宣告 partition。全欄位以字串讀取（`inferSchema=false`），schema 因此完全固定，不受來源資料髒污程度影響。刻意設計成這麼薄的理由見 [ADR-0002](../architecture/adr/0002-medallion-layering.md)，不在此重複展開。
 - **寫入模式**：`DESCRIBE TABLE` 判斷表格是否存在，不存在則 `create()`，存在則 Spark `.append()`。重跑會累積重複列，這是刻意接受的行為，吸收責任在 Silver（見 8.2）。
-- **串流變體**：Bronze 由 Iceberg Kafka Connect sink 寫入（無自訂程式），欄位為 Avro schema 對應的有型別欄位（含 `op`／`before`／`after`／來源變更序），不套「全字串」原則；至少一次傳遞，重播時同樣會累積重複列，吸收責任仍在 Silver。確切欄位、provenance 與 tombstone 處理待 spec 2b §4 項目 1 spike 定案。
+- **串流變體**：Bronze 由 Iceberg Kafka Connect sink 寫入（無自訂程式），欄位為 Avro schema 對應的有型別欄位（含 `op`／`before`／`after`／來源變更序），不套「全字串」原則；至少一次傳遞，重播時同樣會累積重複列，吸收責任仍在 Silver。spike（2026-10-30）實測：欄位為 `before`／`after`／`source`／`transaction` 結構與 `op`、`ts_ms` 等，**沒有** Kafka partition／offset／寫入時間這類 provenance 欄位；tombstone 不落地，刪除語意只依 `op='d'` 事件（細節見 [ADR-0012](../architecture/adr/0012-kafka-connect-iceberg-sink-bronze.md)）。
 
 ### 8.1.2 Silver 層：設計原則
 
@@ -113,5 +114,19 @@ Bronze 的型別策略因來源而異：批次來源是 CSV，沒有任何型別
 
 ## 8.5 與 ADR 的關係 / 尚未涵蓋的範圍
 
-- 本章是 ADR-0002（分層職責）與 ADR-0003（寫入模式、partition 設計）決策的落地細節，取捨理由仍以這兩份 ADR 為準，本章不重複展開。串流形態另見 ADR-0010（串流引擎）、ADR-0011（串流 Silver 品質閘）、ADR-0012（Kafka → Bronze 由 connector 負責，💬 `Proposed`）。
+- 本章是 ADR-0002（分層職責）與 ADR-0003（寫入模式、partition 設計）決策的落地細節，取捨理由仍以這兩份 ADR 為準，本章不重複展開。串流形態另見 ADR-0010（串流引擎）、ADR-0011（串流 Silver 品質閘）、ADR-0012（Kafka → Bronze 由 connector 負責，✅ `Accepted`）。
 - **Athena 查詢驗證**（spec §4 item 8）不在本章範圍，是實際部署後的驗證步驟，不是轉換邏輯的一部分，見 [docs/runbooks/slice0-verification.md](../runbooks/slice0-verification.md)。
+
+## 8.6 Table 建立與 Schema 管控原則（依層級）
+
+本節回答「表由誰、依什麼建立，以及結構異動如何控管」，與 8.2 的寫入模式正交：寫入模式決定資料怎麼進表，本節決定表的結構由誰說了算。三層的管控強度由寬到嚴：
+
+| 層級 | 建表與 Schema 管控原則 |
+| --- | --- |
+| Bronze | 針對未知的半結構化資料（如 JSON API 拋轉、Kafka 原始 Log），允許 Ingestion 工具自動建立寬表或以字串型態儲存，確保資料不落地遺失 |
+| Silver | 結合 Data Contract 與 Data Dictionary 控管。任何欄位異動必須透過版本控制 |
+| Gold | 配合 WAP（Write-Audit-Publish）機制與嚴格的資料驗證框架，確保維度與指標表的結構絕對穩定，供下游 BI 或應用程式安全取用 |
+
+- **Bronze 的 auto-create 以「來源結構未知」為前提**：寬鬆是為了不因結構不明而擋住落地；來源結構已知且有明確定義者（例如由 Glue Schema Registry 管理的 Avro）是否仍採 auto-create，需另依權限最小化評估。Slice 2b 的 spike 發現開啟 auto-create 時 Iceberg sink 會要求 catalog 層級的 `glue:CreateDatabase` 與 Lake Formation `CREATE_DATABASE`（見 [ADR-0012](../architecture/adr/0012-kafka-connect-iceberg-sink-bronze.md)）。
+- **Silver／Gold 的結構異動走版本控制**：結構以預先建立的定義為準，欄位異動經版本控制與審查，不由寫入作業在執行當下決定。
+- **現況與規則的差距**：目前 `silver_stock.py` 在表不存在時、`gold_monthly_ohlcv.py` 每輪執行都以 `createOrReplace()` 建立／重定義結構，尚未做到「先定義結構、再寫資料」，改善項目記於 [docs/TODO.md](../TODO.md)「改善跳過 WAP：建表與寫資料拆分（schema-first DDL Job）」。

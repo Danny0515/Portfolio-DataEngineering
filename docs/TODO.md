@@ -21,6 +21,7 @@
 - [generate_trade_data.py 改為交錯執行多筆交易生命週期](#generate_trade_datapy-改為交錯執行多筆交易生命週期)
 - [新增整合測試](#新增整合測試)
 - [Kafka topic 改為正式 Terraform 管理](#kafka-topic-改為正式-terraform-管理)
+- [Silver 與來源 DB 的對帳機制（防止幽靈存活列）](#silver-與來源-db-的對帳機制防止幽靈存活列)
 - [改善跳過 WAP：建表與寫資料拆分（schema-first DDL Job）](#改善跳過-wap建表與寫資料拆分schema-first-ddl-job)
 
 ---
@@ -122,3 +123,13 @@ Slice 2a 交易 generator 原規劃用 `psycopg[binary]` 連 RDS，改部署成 
 
 ### 執行內容
 待 Slice 2b 項目 2 處理 `bronze.trade_events`／`silver.trade` 建表時（MERGE INTO 目標表須先存在）一併評估是否改為 schema-first，有 trade 當第二案例再決定是否回頭改 stock。若採用需連帶：Silver 移除 bootstrap 分支、Gold 改 `overwrite()`、先實測空表上 `CREATE BRANCH`／`fast_forward` 在 Glue 5.0 / Iceberg 1.7.1 的行為。表定義來源與「開發讀取 Data Contract 轉換成配置的功能」一項合併評估。
+
+---
+
+## Silver 與來源 DB 的對帳機制（防止幽靈存活列）
+
+### 背景與原因
+connector 重建會丟失 offset 並重新 snapshot。若某筆交易在中斷期間被刪除，而 Silver 事先已有它的存活列，snapshot 不含該列、也不會產生 `d` 事件，Silver 會留下永遠存活的「幽靈列」（推論，spike 未實測；中間狀態遺失則已實測，見 [spec 2b §8](specs/slice2b-streaming-upsert.md)）。ADR-0013 的 heartbeat 只降低中斷機率，不能取代對帳。
+
+### 執行內容
+待 Slice 2b 主線（項目 2-9）跑穩後評估：定期取來源 DB 的主鍵集合，與 `silver.trade` 中 `NOT is_deleted` 的主鍵比對，對多出來的列補軟刪除（`is_deleted=true`、用夠大的 `source_lsn`）。需先決定誰有權限讀來源 DB（私有子網，只能經 Lambda）、比對頻率，以及補軟刪除與串流 MERGE 的 LSN 如何不互相覆蓋。

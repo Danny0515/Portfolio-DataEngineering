@@ -725,3 +725,40 @@
 
 > Slice 2b 把 Kafka → Bronze 交給託管 connector，是為了把「Glue × 私有子網 MSK × Glue SR 解碼」這組最大的未知項移出關鍵路徑，並讓擷取與解讀分屬不同故障域（Silver 出問題不阻擋事件落地）；LSN 排序、軟刪除、逐筆規則與隔離表完全不變。`Design` 的 `pipeline` 頁 ④ 已有完整架構圖（含 Slice 2b 規劃）可供開發期間參照，該圖座標未經實際渲染驗證，開啟後若有重疊或穿線請直接微調。pattern 使用次數的 hook 是以「讀取」近似「使用」，讀過不等於實際套用，只當作詢問封裝 skill 的觸發訊號，不是精確計數。
 
+---
+
+## Session 027 — 2026-11-02
+
+- **Engineer**: Danny
+- **Role**: Data Engineer
+- **LLM Used**: Claude Code (claude-sonnet-5-5)
+- **Module**: slice2a-cdc-ingestion（WAL 防護）、slice2b-streaming-upsert（spike）、infra/dev-slice2、infra/dev、docs
+
+### Completed
+
+- [x] (承接 Session 026 Next Step) 依 [slice2-stack-lifecycle.md](../../docs/runbooks/slice2-stack-lifecycle.md) 冷啟動 Slice 2 stack，並完成 Slice 2b §4 項目 1 的兩個 spike，皆通過：(a) Iceberg Kafka Connect sink（MSK Connect，與 Glue SR converter 合併單一 plugin）寫入 `bronze.spike_trade_events`，Athena 可讀、tombstone 不落地、compaction 的 `replace` 快照不影響串流讀取；(b) Glue Streaming（G.025X、Glue 5.0）讀 Bronze 並 `MERGE INTO` 寫 `silver.spike_trade`，LSN 嚴格大於、重播冪等、軟刪除、「Silver 已有較新狀態時舊事件不覆蓋」皆實測通過，不需新增 IAM／Lake Formation。過程、失敗與副作用台帳見 [slice2b-iceberg-sink-spike-verification.md](../../docs/runbooks/slice2b-iceberg-sink-spike-verification.md)
+- [x] 永久修補 Slice 2a 的 replication slot WAL 累積缺口：Debezium connector 新增 heartbeat（60 秒，寫入新表 `debezium_heartbeat`），RDS parameter group 新增 `max_slot_wal_keep_size=10240` 作為保險絲，RDS 儲存 20 → 30GB。根因是 RDS 閒置也每 5 分鐘產生 64MB WAL，而 slot 只在被擷取資料表有變更時前進，原本 20GB 約 32 小時寫滿，connector 狀態仍顯示 `RUNNING` 但 task 已死。實測零交易下 slot 保留量由 1,792MB 降到 64MB 並維持穩定；generator 新增唯讀診斷 payload `diagnose_replication`
+- [x] ADR-0012 轉 ✅ Accepted 並補入 spike 實測發現（2-broker 需 `transaction.state.log.*`、auto-create 需過寬權限、tombstone 不落地）；新增 [ADR-0013](../../docs/architecture/adr/0013-debezium-heartbeat-and-slot-wal-cap.md)；同步 ADR-0007／0010、決策總表、decision-log、slice2a／2b spec；新增 troubleshooting [rds-storage-full-idle-replication-slot.md](../../docs/troubleshooting/rds-storage-full-idle-replication-slot.md)
+- [x] [08_concepts.md](../../docs/arc42/08_concepts.md) 新增 §8.6「Table 建立與 Schema 管控原則（依層級）」（Bronze 允許 auto-create、Silver 以 Data Contract／Data Dictionary 加版本控制、Gold 以 WAP 加嚴格驗證），並更新 8.1.1 的串流 Bronze 描述
+- [x] spec 2b §4 項目 1 勾 ✅；更正 §3.3 對 `op='r'` LSN 的假設（`r` 的 LSN 是快照當下的 WAL 位置，大於快照前事件、小於快照後事件，MERGE 條件不變），補 §8「connector 重建無法補回中間狀態與刪除」風險，對帳機制記入 [docs/TODO.md](../../docs/TODO.md)
+- [x] 刷新 `infra_dev_slice2.md`、`infra_dev.md` 快照；`infra_dev.md` 標註 spike 的兩個 Glue 資源「待移除」（它是 hook 的觸發條件，移除 spike 後再一併更新）
+
+### Related ADRs
+
+- [ADR-0013](../../docs/architecture/adr/0013-debezium-heartbeat-and-slot-wal-cap.md)：以 Debezium heartbeat 與 `max_slot_wal_keep_size` 防止閒置時 replication slot 填滿來源 DB（✅ Accepted）
+- [ADR-0012](../../docs/architecture/adr/0012-kafka-connect-iceberg-sink-bronze.md)：Kafka → Bronze 由 Iceberg Kafka Connect sink 負責（💬 Proposed → ✅ Accepted）
+
+### Next Steps
+
+- [ ] (延續 Session 026) 把 Pattern Card [msk-connect-single-plugin-per-connector.md](../../docs/patterns/msk-connect-single-plugin-per-connector.md) 封裝成 skill；原訂必須在 Slice 2b spike 前完成，實際未做，spike 以手動方式完成打包；其他 Pattern 依 `docs/patterns/overview.md` 的機制處理（累計達 3 次由 hook 提醒後再詢問）
+- [ ] (延續 Session 026) `track-pattern-usage.sh` 的 hook 註冊要開新 session 才會載入，下次實際讀 Pattern Card 時順便確認 `.claude/state/pattern-usage.json` 有被建立與累計
+- [ ] 移除 spike：另開新 plan 後以 commit 4 移除 sink、Glue 串流 job、`silver_trade_stream.py`、`tests/transform/`、`multi_update_tx` 等程式與設定（`transaction.state.log.*`、`diagnose_replication`、spike runbook 保留），隨後同步 `infra_dev.md`；雲端端需 MFA 並 `terraform apply`，兩張 spike 表（`bronze.spike_trade_events`、`silver.spike_trade`）、S3 checkpoint 與 Athena 結果的清除須經確認
+- [ ] 討論 Lake Formation 搭配建表原則：Bronze trade 事件預先建表或 auto-create、DDL 的執行方式、是否改為具名表授權；需先實測關閉 auto-create 後 sink 是否仍會呼叫 `createNamespace`；目前先不異動 Lake Formation
+- [ ] Slice 2b 主線項目 2–9：正式 `bronze.trade_events`／`silver.trade`／`silver.trade_rejects` 的建表、規則檔 `silver_trade.yaml`、Silver 串流作業（可沿用 spike 的 `MERGE INTO` 寫法）
+- [ ] 把 spike runbook 的「未驗證」清單搬進 `docs/TODO.md`（斷點續傳、真實資料量、`expire_snapshots` 的影響、sink 後續 commit 約 3 分鐘延遲的原因、`streaming-max-rows-per-micro-batch` 讀不到資料、刪除 replication slot 的工具），並補 sink 兩個坑的 troubleshooting（`InitProducerId` 逾時、`glue:CreateDatabase` 被拒）
+- [ ] ADR-0013 的長時間（數小時以上）閒置 slot 保留量尚未實測；下次重建 stack 時確認 `init_schema` 在 connector 建立前執行
+
+### Notes
+
+> WAL 缺口是 Slice 2a 設計本身的缺口（ADR-0007 只寫了 consumer 離線），不是 spike 的產物，所以修補永久保留、與可復原的 spike 項目分開記錄。heartbeat 的 query 必須是真的寫入，`SELECT 1` 不產生 WAL 推不動 slot；保險絲的取捨是把「資料庫當機」降級為「slot 作廢、需重新 snapshot」。spike 版本刻意保留在 commit 2 以便退回，移除另開 commit。Slice 2 stack 依使用者決定持續運行供後續開發（約 $0.40／小時含 sink），不在本次銷毀。
+

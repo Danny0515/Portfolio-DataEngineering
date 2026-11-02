@@ -7,7 +7,7 @@
 | **相關模組** | Slice 2b 串流運算（尚未實作；將位於 `infra/environments/dev-slice2/` 與 `src/transform/`） |
 | **決策者** | Danny |
 
-> **範圍註記**：Glue Streaming 的職責範圍已由 [ADR-0012](0012-kafka-connect-iceberg-sink-bronze.md)（💬 `Proposed`）縮小為「Bronze → Silver」，Kafka → Bronze 改由 Iceberg Kafka Connect sink 負責；本 ADR 對「Glue Streaming 優於 Managed Flink」的結論不變。若 ADR-0012 的 spike 不通過，則維持下方的原設計。
+> **範圍註記**：Glue Streaming 的職責範圍已由 [ADR-0012](0012-kafka-connect-iceberg-sink-bronze.md)（✅ `Accepted`）縮小為「Bronze → Silver」，Kafka → Bronze 改由 Iceberg Kafka Connect sink 負責；本 ADR 對「Glue Streaming 優於 Managed Flink」的結論不變。若 ADR-0012 的 spike 不通過，則維持下方的原設計。
 
 ## 背景 (Context)
 

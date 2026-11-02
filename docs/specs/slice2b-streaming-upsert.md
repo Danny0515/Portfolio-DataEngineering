@@ -4,7 +4,7 @@
 > 對應 [plan.md](../../plan.md) §7 分階段交付：Phase 1b（Streaming 主幹）。
 > 前半段見 [slice2a-cdc-ingestion.md](slice2a-cdc-ingestion.md)。
 > 狀態：**§3 待確認事項已全數拍板** — 以下 §4 實作項目清單即為實作依據。
-> 修訂註記：Kafka → Bronze 這一段已依 [ADR-0012](../architecture/adr/0012-kafka-connect-iceberg-sink-bronze.md)（💬 `Proposed`，待 §4 項目 1 spike 通過後轉 `Accepted`）改由 Iceberg Kafka Connect sink 負責，§1、§2、§3.1、§3.2、§4、§5、§8、§9 已同步調整；spike 不通過則回到 [ADR-0010](../architecture/adr/0010-glue-streaming-vs-managed-flink.md) 的原設計。
+> 修訂註記：Kafka → Bronze 這一段已依 [ADR-0012](../architecture/adr/0012-kafka-connect-iceberg-sink-bronze.md)（✅ `Accepted`，§4 項目 1 的 (a)(b) spike 已於 2026-10-30 通過）改由 Iceberg Kafka Connect sink 負責，§1、§2、§3.1、§3.2、§4、§5、§8、§9 已同步調整；spike 不通過則回到 [ADR-0010](../architecture/adr/0010-glue-streaming-vs-managed-flink.md) 的原設計。
 
 ---
 
@@ -76,7 +76,7 @@ Slice 0 用 append 不是因為簡單，是因為資料不會變；2b 用 upsert
 
 **Slice 3 的引擎不在此決定**：兩者銜接點是 Kafka topic 與 Iceberg 表，皆引擎中立，本片的選擇不會鎖死 Slice 3；該 Slice 的 spec §3 再重新評估（Flink 或 Glue Streaming）。完整論述與替代方案見 [ADR-0010](../architecture/adr/0010-glue-streaming-vs-managed-flink.md)。
 
-**補充決定（💬 Proposed，[ADR-0012](../architecture/adr/0012-kafka-connect-iceberg-sink-bronze.md)）：採 C**。選 B 的結論不變（Silver 仍由 Glue Streaming 以 `MERGE INTO` 維護），但**職責範圍縮小為「Bronze → Silver」**：Kafka → Bronze 改由 Iceberg Kafka Connect sink 負責。理由：
+**補充決定（✅ Accepted，[ADR-0012](../architecture/adr/0012-kafka-connect-iceberg-sink-bronze.md)）：採 C**。選 B 的結論不變（Silver 仍由 Glue Streaming 以 `MERGE INTO` 維護），但**職責範圍縮小為「Bronze → Silver」**：Kafka → Bronze 改由 Iceberg Kafka Connect sink 負責。理由：
 - B 路線的未知項集中在 Glue 作業連 MSK 與在 Spark 內解 Glue SR 的 Debezium Avro；改為讀 Bronze 後，Glue 作業只碰 Iceberg，沿用 Slice 0/1 已驗證的技術棧。
 - 擷取與解讀分屬不同故障域：Silver 的 bug 或停機不再阻擋事件落地，降低落後超過 Kafka retention 而遺失事件的風險（Slice 2 用完即拆，Bronze 是唯一長期事件紀錄）。
 - LSN 排序、軟刪除（§3.3）、逐筆規則與隔離（§3.4）完全不變。
@@ -139,7 +139,7 @@ CDC + upsert 最容易出錯的地方：**同一個 `trade_id` 的多個事件�
 
 **代價**：Athena 使用者需加 `WHERE NOT is_deleted` 才看得到當前存在的交易（可日後提供 view）；§4 項目 7 與來源 DB 比對時需排除 `is_deleted` 的列。
 
-**前提與待實測**：此決定依賴三項前提（同交易內 LSN 是否各不相同、重建後 `trade_id` 不重複、`op='r'` 的 LSN 順序），已列於 §4 項目 1 下方，於 spike 階段實測。
+**前提與實測結果**：此決定依賴三項前提，已於 §4 項目 1 的 spike 實測（2026-10-30，詳見 [spike runbook](../runbooks/slice2b-iceberg-sink-spike-verification.md)）：(1) 同交易內各筆變更的 `source.lsn` 各不相同、嚴格遞增，**成立**，不需 tie-break；(2) 重建後 `trade_id` 不重複：id 由當下時間決定、不由 `seed` 決定，有正面證據，但**完整跨重建驗證仍未做**；(3) `op='r'` 的 `source.lsn` 是快照當下的 WAL 位置，**大於快照前的事件、小於快照後的事件**，並非該筆交易最早的事件（原先「`r` 小於其後同一筆交易的變更」的描述已更正），**嚴格大於的 MERGE 條件仍然正確**。另外，connector 重建並重新 snapshot 時，中斷期間的中間狀態與刪除無法補回，見 §8 風險。
 
 ### 3.4 串流路徑的品質防線是否延伸到表層
 
@@ -166,7 +166,7 @@ CDC + upsert 最容易出錯的地方：**同一個 `trade_id` 的多個事件�
 
 | # | 項目 | 說明 | 產出 | 完成 |
 | --- | --- | --- | --- | --- |
-| 1 | 擷取與串流 spike | 依 §3.1 的補充決定（[ADR-0012](../architecture/adr/0012-kafka-connect-iceberg-sink-bronze.md)），分兩個獨立最小 spike，通過後才接真實資料。**(a) Iceberg Kafka Connect sink on MSK Connect**：plugin 打包（與 Glue SR converter 合併成單一 plugin，沿用 [Pattern Card](../patterns/msk-connect-single-plugin-per-connector.md)）、runtime 套件含 Glue Catalog 所需 AWS bundle 且與 Iceberg 版本相容、能解 Glue Schema Registry 的 Debezium Avro、寫入 Glue Catalog 且 Athena 讀得到、控制 topic 與 IAM／Lake Formation 授權、commit 間隔取捨、tombstone 處理、表由 connector auto-create 或預先建立。**(b) Silver 串流作業**：Glue Streaming 以 Bronze（Iceberg）為串流來源，`foreachBatch` 內 `MERGE INTO` 寫入 Glue Catalog 且 Athena 讀得到，並實測 G.025X worker 在 Glue 5.0 是否可用、compaction 產生的 replace 快照對串流讀取的影響。**任一 spike 不通過，回到 ADR-0010 的原設計**；**另有附帶的實測確認項，見表格下方** | spike 腳本 + runbook | ⬜ |
+| 1 | 擷取與串流 spike | 依 §3.1 的補充決定（[ADR-0012](../architecture/adr/0012-kafka-connect-iceberg-sink-bronze.md)），分兩個獨立最小 spike，通過後才接真實資料。**(a) Iceberg Kafka Connect sink on MSK Connect**：plugin 打包（與 Glue SR converter 合併成單一 plugin，沿用 [Pattern Card](../patterns/msk-connect-single-plugin-per-connector.md)）、runtime 套件含 Glue Catalog 所需 AWS bundle 且與 Iceberg 版本相容、能解 Glue Schema Registry 的 Debezium Avro、寫入 Glue Catalog 且 Athena 讀得到、控制 topic 與 IAM／Lake Formation 授權、commit 間隔取捨、tombstone 處理、表由 connector auto-create 或預先建立。**(b) Silver 串流作業**：Glue Streaming 以 Bronze（Iceberg）為串流來源，`foreachBatch` 內 `MERGE INTO` 寫入 Glue Catalog 且 Athena 讀得到，並實測 G.025X worker 在 Glue 5.0 是否可用、compaction 產生的 replace 快照對串流讀取的影響。**任一 spike 不通過，回到 ADR-0010 的原設計**；**另有附帶的實測確認項，見表格下方** | spike 腳本 + runbook | ✅ |
 | 2 | 表結構與權限 | 建立 `bronze.trade_events` / `silver.trade` 的 Glue database/table 權限（Lake Formation grant，比照 Slice 0 既有模式；connector 的執行角色另需一組 grant），partition 設計依查詢模式決定 | Terraform 資源 | ⬜ |
 | 3 | Bronze CDC 事件落地 | 部署 Iceberg sink connector，把 CDC 事件 append 進 `bronze.trade_events`（有型別欄位，見 §3.2），保留 `op` / `before` / `after` / 來源變更序 | Iceberg table `bronze.trade_events` + connector 設定 | ⬜ |
 | 4 | Silver MERGE INTO | 以 Bronze 為來源，依 §3.3 的排序鍵做批次內 dedup 後 `MERGE INTO silver.trade`，含刪除事件處理；僅合規列進入 MERGE（見項目 5） | Iceberg table `silver.trade` | ⬜ |
@@ -178,11 +178,11 @@ CDC + upsert 最容易出錯的地方：**同一個 `trade_id` 的多個事件�
 | 10 | 端到端驗證 | 彙總 runbook + 衛星 runbook（依 execution-roadmap.md §3 命名慣例） | `docs/runbooks/slice2b-verification.md` | ⬜ |
 | 11 | 文件產出 | 見下方 §9 | Pattern Card / ADR / Decision Log | ⬜ |
 
-**項目 1 spike 附帶的實測確認項**（§3.3 排序鍵選 `source.lsn`、刪除選軟刪除，以下三項是該決定成立的前提，需在 Slice 2 stack 冷啟動後的 spike 階段實測，結果寫進 spike runbook；任一項不成立就回頭修訂 §3.3 與項目 4 的 MERGE 條件）：
+**項目 1 spike 附帶的實測確認項**（§3.3 排序鍵選 `source.lsn`、刪除選軟刪除，以下三項是該決定成立的前提，已在 Slice 2 stack 冷啟動後的 spike 階段實測（2026-10-30），結果寫在 [spike runbook](../runbooks/slice2b-iceberg-sink-spike-verification.md)；任一項不成立就回頭修訂 §3.3 與項目 4 的 MERGE 條件）：
 
-1. **同一交易內多筆變更的 LSN 是否各不相同**：讓 generator（或手動）在單一交易內對來源表做多筆變更，檢查 topic 上這些事件的 `source.lsn` / `source.sequence` / `source.txId`。各不相同，則 MERGE 條件維持嚴格大於（`s.source_lsn > t.source_lsn`）；若會相同，需補 tie-break（`source.sequence`、`txId` 或 Kafka offset）並同步修訂項目 4。
-2. **重建後 `trade_id` 不重複**：「stack 重建後 LSN 歸零不影響 MERGE」依賴「同一個 `trade_id` 只存在於一個 DB 生命週期」。需確認 generator 的 `trade_id`（目前觀察到的格式 `T<epoch 秒>-<序號>`）在固定 `seed` 參數下，跨多次執行與跨重建都不會重複；若會重複，重建後新事件的 LSN 會比 Silver 內舊列小而被忽略，需改排序鍵或在重建時清空 Silver。
-3. **`op='r'`（初始快照）的 LSN 與後續變更的相對順序**：確認 `r` 事件的 `source.lsn` 小於其後同一筆交易的 `c`/`u`/`d` 事件，以及 connector 重新 snapshot 後，同一 `trade_id` 的 `r` 事件不會把 Silver 較新的狀態蓋回舊值（`r` 視同 upsert，與 `c`/`u` 走同一個比較條件）。
+1. **同一交易內多筆變更的 LSN 是否各不相同**：讓 generator（或手動）在單一交易內對來源表做多筆變更，檢查 topic 上這些事件的 `source.lsn` / `source.sequence` / `source.txId`。各不相同，則 MERGE 條件維持嚴格大於（`s.source_lsn > t.source_lsn`）；若會相同，需補 tie-break（`source.sequence`、`txId` 或 Kafka offset）並同步修訂項目 4。**實測結果：成立**——單一交易（INSERT＋3 次 UPDATE）內四筆事件的 `source.lsn` 各不相同且嚴格遞增，MERGE 條件維持嚴格大於。
+2. **重建後 `trade_id` 不重複**：「stack 重建後 LSN 歸零不影響 MERGE」依賴「同一個 `trade_id` 只存在於一個 DB 生命週期」。需確認 generator 的 `trade_id`（目前觀察到的格式 `T<epoch 秒>-<序號>`）在固定 `seed` 參數下，跨多次執行與跨重建都不會重複；若會重複，重建後新事件的 LSN 會比 Silver 內舊列小而被忽略，需改排序鍵或在重建時清空 Silver。**實測結果：有正面證據，完整驗證未做**——`trade_id` 前綴由當下時間決定而非 `seed`（同樣 `seed=1`，2026-10-02 為 `T1790928976`、2026-10-27 為 `T1793082654`），但尚未做跨重建的完整驗證。
+3. **`op='r'`（初始快照）的 LSN 與後續變更的相對順序**：確認 `r` 事件的 `source.lsn` 與其前後的 `c`/`u`/`d` 事件的相對順序，以及 connector 重新 snapshot 後，同一 `trade_id` 的 `r` 事件不會把 Silver 較新的狀態蓋回舊值（`r` 視同 upsert，與 `c`/`u` 走同一個比較條件）。**實測結果（已更正原假設）**：重建 connector 後 6 筆 `r` 的 `source.lsn` 全相同（快照當下的 WAL 位置，`21273510984`），**大於**同批交易快照前的 `c`/`u`/`d`（`5.3×10⁸` 量級），**小於**重建後才發生的新事件（`2.14×10¹⁰` 起），所以 `r` 並非該交易最早的事件，而是反映快照當下的最新狀態；`r` 視同 upsert、嚴格大於的條件不需修改，亂序與重播測試（spike runbook）也證實舊事件不會覆蓋較新的狀態。
 
 **2a 證據缺口補查**（stack 冷啟動後順手確認，不阻擋 2b；2b 的值規則由 Silver 強制，不依賴這兩項）：
 
@@ -242,6 +242,8 @@ CDC + upsert 最容易出錯的地方：**同一個 `trade_id` 的多個事件�
 
 - **風險（exactly-once 的實際邊界）**：「CDC + upsert 不重複」在實務上是「至少一次傳遞 + 冪等寫入」的組合結果，而非端到端 exactly-once。→ 驗收（§7）以「重播後結果不變」的可觀測行為為準；ADR / Pattern Card 中據實說明語意邊界，不宣稱做到端到端 exactly-once。
 
+- **風險（connector 重建與重新 snapshot 的資料缺口）**：connector 重建會丟失 offset 並重新 snapshot，中斷期間發生的**中間狀態無法補回**（spike 實測：重建前後的中間事件永久遺失，只剩快照後的最終狀態 `r`）。另有推論（**未實測**）：若某筆交易在中斷期間被刪除，而 Silver 事先已有它的存活列，snapshot 不含該列、也不會產生 `d` 事件，Silver 會留下永遠存活的「幽靈列」。→ ADR-0013 的 heartbeat 與 `max_slot_wal_keep_size` 降低中斷發生的機率，但不能取代對帳；對帳機制（定期以來源主鍵集合比對 Silver 存活列、補軟刪除）列入 [docs/TODO.md](../TODO.md)，不在本片範圍。
+
 - **風險（小檔與效能）**：Silver 串流微批次頻繁 MERGE 會產生大量小檔與 delete file；Bronze 端的 sink 以固定間隔 commit，間隔調小會增加小檔與 snapshot 數量。Iceberg 需要定期 compaction / expire snapshots。→ 本片先確認正確性，維護作業若成為問題，記錄為 runbook 或列入 `docs/TODO.md` 待 Slice 4 的維運議題處理，不在本片過度工程化。
 
 - **風險（Lake Formation 權限）**：新增 `bronze.trade_events` / `silver.trade` 兩張表，Session 003 兩次踩到的 Lake Formation 授權坑（Glue Job 執行角色、人身帳號各需一組 grant）會再遇到一次。→ 比照既有模式一次補齊（既有 `lakeformation.tf` 的表層 wildcard grant 已涵蓋 `bronze` / `silver` 新表，但新建的 connector 執行角色與 Silver 串流作業的執行角色各需另補一組）。先前的 `athena_reader_tables["bronze"]` drift 已由 [ADR-0005](../architecture/adr/0005-project-admin-permission-exemption.md) 收斂；現行表 grant 不含 `DELETE`；§3.3 已決定軟刪除，`MERGE` 只做 UPDATE／INSERT，預期不需要 `DELETE`，spike 時確認。
@@ -259,7 +261,7 @@ CDC + upsert 最容易出錯的地方：**同一個 `trade_id` 的多個事件�
 - `docs/specs/slice2b-streaming-upsert.md` — 本文件
 - `docs/architecture/adr/0010-glue-streaming-vs-managed-flink.md` — 為何 2b 串流運算選 Glue Streaming（已產出）
 - `docs/architecture/adr/0011-streaming-silver-quality-gate.md` — 串流 Silver 的品質閘：Registry 管結構、Silver 管值，逐筆規則加隔離（已產出）
-- `docs/architecture/adr/0012-kafka-connect-iceberg-sink-bronze.md` — Kafka → Bronze 改由 Iceberg Kafka Connect sink 負責，Silver 由 Glue Streaming 讀 Bronze（已產出，💬 `Proposed`，待項目 1 spike 通過轉 `Accepted`）
+- `docs/architecture/adr/0012-kafka-connect-iceberg-sink-bronze.md` — Kafka → Bronze 改由 Iceberg Kafka Connect sink 負責，Silver 由 Glue Streaming 讀 Bronze（已產出，✅ `Accepted`）
 - `src/quality/rules/silver_trade.yaml` — Silver 逐筆規則的單一來源
 - `docs/patterns/cdc-merge-into.md` — Pattern Card（本專案第四份，繼 `wap-quality-gate.md`、`lambda-vpc-access-gateway.md`、`msk-connect-single-plugin-per-connector.md`）
 - `contracts/trade-events.contract.yaml`（v2）— 補上 Silver model 與實測 SLA
