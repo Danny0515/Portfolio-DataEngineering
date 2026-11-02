@@ -136,7 +136,7 @@ def run_ddl(conn) -> None:
     conn.commit()
 
 
-def execute_operation(conn, operation: str, row: dict, commit: bool = True) -> None:
+def execute_operation(conn, operation: str, row: dict) -> None:
     with conn.cursor() as cur:
         if operation == "INSERT":
             cur.execute(
@@ -161,35 +161,7 @@ def execute_operation(conn, operation: str, row: dict, commit: bool = True) -> N
             cur.execute("DELETE FROM trade WHERE trade_id = %s", (row["trade_id"],))
         else:
             raise ValueError(f"Unknown operation: {operation}")
-    if commit:
-        conn.commit()
-
-
-def generate_multi_update_tx(conn, seed: int) -> dict:
-    """Slice 2b spike helper: apply a full order lifecycle (INSERT + several UPDATEs) to
-    ONE trade inside a SINGLE transaction, so the CDC events share one commit. Used to
-    check whether Debezium's source.lsn differs across changes within one transaction
-    (docs/specs/slice2b-streaming-upsert.md §4 item 1). Not part of the normal flow."""
-    rng = random.Random(seed)
-    trade_id = f"T{int(time.time())}-TX00"
-    operations = [
-        ("INSERT", None),
-        ("UPDATE", "PARTIALLY_FILLED"),
-        ("UPDATE", "PARTIALLY_FILLED"),
-        ("UPDATE", "FILLED"),
-    ]
-    base_ops, _ = generate_trade_lifecycle(rng, trade_id, 0.0)
-    row = dict(base_ops[0][1])
-    try:
-        for operation, status in operations:
-            if status:
-                row = {**row, "status": status, "updated_at": _now()}
-            execute_operation(conn, operation, row, commit=False)
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    return {"multi_update_tx": trade_id, "changes_in_one_transaction": len(operations)}
+    conn.commit()
 
 
 def summarize(conn) -> dict:
@@ -249,9 +221,10 @@ def fetch_rows(conn, limit: int) -> list:
 
 
 def diagnose_replication(conn) -> dict:
-    """Read-only diagnostic (Slice 2b spike, WAL growth investigation): replication slot
-    positions, current WAL position, walsender sessions and the oldest open transactions.
-    The RDS instance is private, so this Lambda is the only way to run these SELECTs."""
+    """Read-only diagnostic for replication slot health (see ADR-0013): slot positions and
+    retained WAL, walsender sessions, the oldest open transactions, publications and the
+    Debezium heartbeat row. The RDS instance is private, so this Lambda is the only way
+    to run these SELECTs."""
     queries = {
         "slots": """
             SELECT slot_name, plugin, slot_type, active, active_pid, xmin::text, catalog_xmin::text,
@@ -320,8 +293,6 @@ def lambda_handler(event, context):
             return {"rows": fetch_rows(conn, event.get("limit", 10))}
         if event.get("diagnose_replication"):
             return diagnose_replication(conn)
-        if event.get("multi_update_tx"):
-            return generate_multi_update_tx(conn, seed=event.get("seed", 42))
         result = generate(
             conn,
             num_trades=event.get("num_trades", 10),

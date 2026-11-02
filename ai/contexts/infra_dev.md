@@ -41,7 +41,5 @@
 - `aws_glue_job.bronze_stock`
 - `aws_glue_job.silver_stock`
 - `aws_glue_job.gold_monthly_ohlcv`
-- `aws_s3_object.silver_trade_stream_script`（Slice 2b spike，`glue_silver_trade_stream.tf`，待移除）
-- `aws_glue_job.silver_trade_stream_spike`（Slice 2b spike，Glue Streaming、G.025X，待移除；平時應為停止狀態）
 
 > 專案總架構師帳號的 Lake Formation 授權不在此追蹤（刻意不由本專案 Terraform 管理，理由見 [ADR-0005](../../docs/architecture/adr/0005-project-admin-permission-exemption.md)），其現況需直接查 `aws lakeformation list-permissions`，不會出現在上方清單。

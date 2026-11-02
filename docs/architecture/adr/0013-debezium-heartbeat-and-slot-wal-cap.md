@@ -45,5 +45,5 @@
   - 多一張心跳表，以及每分鐘一則 `__debezium-heartbeat.transaction` 訊息；該 topic 的 schema 會經 converter 自動註冊進 Glue Schema Registry。心跳不會進 Bronze（Iceberg sink 的 `topics` 是精確指定 `transaction.trade.v1`）。
   - 重建 stack 時，`init_schema` 必須在 connector 建立之前執行（原本的建立流程階段二已是這個順序）。
   - 穩態下 slot 保留量約為一個 WAL 段（64MB），不是 0。
-  - 數小時以上的長時間閒置尚未實測，目前證據是約 10 分鐘、3 個切段週期。
+  - 長時間閒置已補測：自 2026-10-30 最後一筆交易後閒置約 70 小時（2026-11-02），slot 保留量仍為 64MB、心跳持續更新；原先沒有 heartbeat 時 32 小時就把 20GB 寫滿。
 - ❌ **負面/限制**：`max_slot_wal_keep_size` 一旦觸發，slot 被作廢（`wal_status=lost`），Debezium 必須重建 slot 並重新 snapshot，**期間的事件永久遺失**。目前沒有刪除 replication slot 的工具，實際發生時需要新增 Lambda payload 或重建整組 stack。

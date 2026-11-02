@@ -762,3 +762,31 @@
 
 > WAL 缺口是 Slice 2a 設計本身的缺口（ADR-0007 只寫了 consumer 離線），不是 spike 的產物，所以修補永久保留、與可復原的 spike 項目分開記錄。heartbeat 的 query 必須是真的寫入，`SELECT 1` 不產生 WAL 推不動 slot；保險絲的取捨是把「資料庫當機」降級為「slot 作廢、需重新 snapshot」。spike 版本刻意保留在 commit 2 以便退回，移除另開 commit。Slice 2 stack 依使用者決定持續運行供後續開發（約 $0.40／小時含 sink），不在本次銷毀。
 
+---
+
+## Session 028 — 2026-11-02
+
+- **Engineer**: Danny
+- **Role**: Data Engineer
+- **LLM Used**: Claude Code (claude-sonnet-5-5)
+- **Module**: slice2b-streaming-upsert（spike 移除）、infra/dev-slice2、infra/dev、docs
+
+### Completed
+
+- [x] (承接 Session 027 Next Step) 移除 Slice 2b spike：刪除 Iceberg sink Terraform（含 spike 專用的 `glue:CreateDatabase` 與 Lake Formation `CREATE_DATABASE`）、Glue 串流 job、`silver_trade_stream.py`、`tests/transform/`，並移除 generator 的 `multi_update_tx`；保留 `transaction.state.log.*`（正式版 sink 必要）、RDS 30GB、`diagnose_replication` 與 spike runbook。spike 版本保留於 commit `09f70e8`
+- [x] 雲端端依序執行：`dev` 2 個 destroy；`dev-slice2` 以 `-target` 銷毀 sink 的 12 個位址並重新部署 generator（state 69 → 55），再 `state rm` 3 個 sink data source、`apply -refresh-only` 清掉過期 output；sink 刪除後才 DROP `bronze.spike_trade_events`、`silver.spike_trade`（避免 auto-create 重建），並軟刪除 checkpoint 與 Athena 結果。回歸通過：Debezium `RUNNING`、slot 保留 64MB、心跳持續、RDS 14 筆
+- [x] 補測 ADR-0013 的長時間閒置：閒置約 70 小時 slot 保留量仍為 64MB；更新 ADR-0013 與 spike runbook，並在 runbook 新增「移除紀錄」（含無法移除的殘留與永久清除舊版本的指令）；刷新 `infra_dev_slice2.md`、`infra_dev.md` 快照
+
+### Related ADRs
+
+- 無新增 ADR（移除 spike 與補測屬 ADR-0012／ADR-0013 的後續執行，不構成新決策；ADR-0013 的影響欄補上長時間閒置的實測）
+
+### Next Steps
+
+- [ ] (延續 Session 026) 把 Pattern Card [msk-connect-single-plugin-per-connector.md](../../docs/patterns/msk-connect-single-plugin-per-connector.md) 封裝成 skill；其他 Pattern 依 `docs/patterns/overview.md` 的機制處理
+- [ ] (延續 Session 027) Slice 2b 主線項目 2–9：正式 `bronze.trade_events`／`silver.trade`／`silver.trade_rejects` 的建表、規則檔 `silver_trade.yaml`、Silver 串流作業（可參考 `09f70e8` 的 `MERGE INTO` 寫法）
+
+### Notes
+
+> 用 `-target` 銷毀資源不會清掉已從設定移除的 data source 與 root output，需另做 `state rm` 與 `apply -refresh-only`，下次移除整個 `.tf` 時可直接用 `-refresh-only` 收尾。清資料的順序是先銷毀 sink connector、再 DROP 表，否則開啟 auto-create 的 connector 可能把表重建。control topic、consumer group 與 spike 期間寫入 topic 的事件無法移除，只能隨 stack 銷毀（Slice 2 stack 依使用者決定持續運行）。
+

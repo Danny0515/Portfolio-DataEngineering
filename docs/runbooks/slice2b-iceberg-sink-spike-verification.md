@@ -30,7 +30,7 @@
 
 - Slice 2 stack 已依 [slice2-stack-lifecycle.md](slice2-stack-lifecycle.md) 冷啟動（2026-10-27）。
 - 本機 MFA session（`dt-lab-long-term-mfa`）有效。
-- Terraform：[`msk_connector_iceberg_sink.tf`](../../infra/environments/dev-slice2/msk_connector_iceberg_sink.tf)（新增檔，spike 專用，可整檔移除）。
+- Terraform：`infra/environments/dev-slice2/msk_connector_iceberg_sink.tf`（新增檔，spike 專用；**已於 2026-11-02 移除**，spike 版本保留於 commit `09f70e8`，可用 `git show 09f70e8:<路徑>` 查看）。
 
 ## 部署
 
@@ -180,7 +180,7 @@ topic 當時有 16 則訊息（`c` 5、`u` 9、`d` 1、tombstone 1）→ Bronze 
 
 ### 未驗證／已知限制
 
-- **長時間閒置**（數小時以上）未實測；目前證據是約 10 分鐘、3 個切段週期。
+- **長時間閒置**：當時只有約 10 分鐘、3 個切段週期的證據；2026-11-02 補測——自 2026-10-30 最後一筆交易（約 09:20 UTC）後閒置約 70 小時，slot 保留量仍為 **64MB**（`wal_status=reserved`），心跳 12 秒前才更新（推算：未加 heartbeat 時以約 0.75GB／小時計，同樣時間會累積 50GB 以上，超過 30GB 儲存）。
 - **B 觸發後的實際行為**（slot 被作廢、`wal_status=lost`、Debezium 失敗模式與復原）未實測，也不打算人為觸發。目前沒有刪除 replication slot 的工具（generator 只有唯讀診斷）；實際發生時需新增 payload 或重建整組 stack。
 - 心跳 topic `__debezium-heartbeat.transaction` 是否有訊息，只能由 Glue SR 已註冊該 schema 間接推論（沒有 Kafka 管理介面可直接列 topic）。
 - 穩態下 `restart_lsn` 會落後 `confirmed_flush_lsn` 約一個心跳週期，所以保留量固定停在約一個 WAL 段（64MB）而不是 0；這是預期現象，不是異常。
@@ -193,9 +193,9 @@ topic 當時有 16 則訊息（`c` 5、`u` 9、`d` 1、tombstone 1）→ Bronze 
 
 ### 設計與部署
 
-- 腳本 [silver_trade_stream.py](../../src/transform/silver_trade_stream.py)；Glue job `slice2b-silver-trade-stream-spike`（[glue_silver_trade_stream.tf](../../infra/environments/dev/glue_silver_trade_stream.tf)，放 `dev` 環境，`gluestreaming`、Glue 5.0、**G.025X × 2**、timeout 180 分鐘當安全網）。
+- 腳本 `src/transform/silver_trade_stream.py`；Glue job `slice2b-silver-trade-stream-spike`（`infra/environments/dev/glue_silver_trade_stream.tf`，放 `dev` 環境；腳本與 Terraform **已於 2026-11-02 移除**，保留於 commit `09f70e8`），`gluestreaming`、Glue 5.0、**G.025X × 2**、timeout 180 分鐘當安全網）。
 - 讀 `bronze.spike_trade_events`（`readStream.format("iceberg")`，觸發間隔 60 秒），`foreachBatch` 內先對批次做「每個 `trade_id` 取最大 `source.lsn`」（`op='d'` 取 `before` 並標 `is_deleted=true`），再對 `silver.spike_trade` 做 `MERGE INTO ... WHEN MATCHED AND 新 LSN > 舊 LSN THEN UPDATE ... WHEN NOT MATCHED THEN INSERT`。不含品質規則與 rejects 表（項目 5）。
-- 純轉換函式 `latest_per_trade` 有 8 個本機 pyspark 單元測試（[test_silver_trade_stream.py](../../tests/transform/test_silver_trade_stream.py)），MERGE 本身只能在 Glue 驗證。
+- 純轉換函式 `latest_per_trade` 有 8 個本機 pyspark 單元測試（`tests/transform/test_silver_trade_stream.py`，同樣保留於 commit `09f70e8`），MERGE 本身只能在 Glue 驗證。
 - **不需要新增任何 IAM／Lake Formation**：既有 `glue_market` 角色與 `bronze`／`silver` 的 wildcard 授權，就能讀由另一個 principal（sink 角色）建立的 Bronze 表，也能建立並寫入 `silver.spike_trade`；事前的假設成立。
 - MERGE 用**完整限定名**寫法（依 ADR-0010 的提醒）在 Glue 5.0 直接成功，沒有用到備援的別名寫法。
 
@@ -240,9 +240,11 @@ topic 當時有 16 則訊息（`c` 5、`u` 9、`d` 1、tombstone 1）→ Bronze 
 
 **(b) 的結論**：Glue Streaming（G.025X、Glue 5.0）讀 Bronze（Iceberg）並 `MERGE INTO` Silver 技術上可行：LSN 排序、重播冪等、軟刪除、亂序防護、compaction 的 `replace` 快照都通過實測，且不需新增 IAM／Lake Formation。依此 (a)(b) 兩個 spike 皆通過；ADR-0012 已由使用者確認轉為 `Accepted`（2026-11-02）；spec §4 項目 1 的勾選**尚未改動**。
 
-**待決定**：(1) spec §4 項目 1 是否勾 ✅；(2) 是否修正 spec §3.3 對 `op='r'` LSN 的假設（(a) 實測與假設不符）；(3) spike 資源的移除：使用者決定不保留 spike，待三次 commit 完成後另以一個 commit 移除 spike 的程式與設定（保留 spike 版本於前面的 commit 以便退回），雲端資源與 `bronze.spike_trade_events`／`silver.spike_trade` 依下方台帳處理。
+**待決定**：(1) spec §4 項目 1 是否勾 ✅；(2) 是否修正 spec §3.3 對 `op='r'` LSN 的假設（(a) 實測與假設不符）；(3) spike 資源的移除：使用者決定不保留 spike，已於 2026-11-02 移除程式、設定、雲端資源與兩張 spike 表（spike 版本保留於 commit `09f70e8`），詳見「移除紀錄」。
 
 ## 副作用台帳
+
+> **2026-11-02 更新**：下方「可復原」各列已依最後的「移除紀錄」處理完畢（`rds.tf` 的儲存與 `msk.tf` 的 `transaction.state.log.*` 依決定保留，不復原）；各列保留原文作為當時的台帳，實際結果以「移除紀錄」為準。
 
 ### 可復原
 
@@ -292,17 +294,41 @@ topic 當時有 16 則訊息（`c` 5、`u` 9、`d` 1、tombstone 1）→ Bronze 
 | (b) 階段與 WAL 修補驗證期間再經 generator 寫進 `transaction.trade.v1` 的事件 | 4 筆交易共 10 個 `c`／`u` 事件（Bronze 由 38 列增為 48 列）；加上 WAL 修補驗證用的那一筆交易的 `c`／`u`／`d` 與 tombstone；topic 只能隨 stack 銷毀 |
 | `__debezium-heartbeat.transaction` 的心跳訊息 | 每分鐘 1 則，持續累積至 stack 銷毀（屬永久修補的一部分） |
 
-### 復原指令（未執行，等你確認）
+### 移除紀錄（2026-11-02）
+
+使用者決定不保留 spike；spike 版本留在 commit `09f70e8`（`git show 09f70e8:<路徑>`），移除作業另以一個 commit 進行。實際執行順序與結果：
+
+| 步驟 | 內容 | 結果 |
+| --- | --- | --- |
+| 1 | 事前檢查 | 五次串流 run 皆 `STOPPED`；Debezium connector `RUNNING`；slot 保留量 64MB |
+| 2 | `dev`：移除 `glue_silver_trade_stream.tf` 後 `terraform apply` | plan 只有 2 個 destroy（Glue job、S3 腳本物件），套用成功；`dev` state 剩 26 項 |
+| 3 | `dev-slice2`：移除 `msk_connector_iceberg_sink.tf` 後以 `-target` 套用 sink 的 12 個位址，並重新部署 generator（不含 `multi_update_tx`） | 12 個 destroy、generator 更新成功；sink connector 刪除約 15 秒。另對 3 個僅存在於 state 的 sink data source 做 `state rm`，並以 `apply -refresh-only` 清掉 state 內過期的 sink output；`dev-slice2` state 回到 55 項，完整 `terraform plan` 只剩已知的 plugin S3 etag 雜訊 |
+| 4 | Athena `DROP TABLE bronze.spike_trade_events`、`silver.spike_trade`（在 sink 刪除之後，避免 auto-create 重建） | 兩個語句皆成功；Glue Catalog 只剩 `bronze.stock`、`silver.stock`、`silver.audit_log`、`gold.monthly_ohlcv`；兩個表前綴的現行物件為 0 |
+| 5 | 清 `glue-temp/spike-silver-trade/`（39 個物件）與 `athena-results/spike/`（185 個物件）的現行物件 | 軟刪除完成，現行物件皆為 0 |
+| 6 | 回歸 | Debezium connector 仍 `RUNNING`、worker log 15 分鐘內無錯誤；`diagnose_replication` 回報 slot 保留 64MB、`max_slot_wal_keep_size=10240`、心跳持續更新；RDS 14 筆交易；既有 7 個測試通過 |
+
+**保留（刻意不復原）**：`msk.tf` 的 `transaction.state.log.*`（正式版 sink 在 2-broker 下必要）、`rds.tf` 的 30GB（只能增不能減）、`diagnose_replication`、本報告。
+
+**移除後的殘留**：
+- S3 版本控制下的舊版本與 delete marker（軟刪除的結果）：`lakehouse/bronze.db/spike_trade_events/` 73 個版本＋145 個 delete marker、`lakehouse/silver.db/spike_trade/` 53＋108、`glue-temp/spike-silver-trade/` 58＋58、`athena-results/spike/` 187＋185，合計不到 1MB，可還原。
+- MSK 上無法移除的項目：control topic `control-iceberg-spike`、sink 的 consumer group 位移、`__transaction_state` 內部 topic、spike 期間寫入 `transaction.trade.v1` 的事件，只能隨 stack 銷毀。
+- MSK configuration revision 2（revision 不能刪）。
+- Glue job 的 `/aws-glue/jobs/*` log group（AWS 自動建立、與其他 job 共用，保留期 30 天，不在 Terraform 內）。sink 的 log group 由 Terraform 管理，已隨 apply 刪除。
+
+**永久清除舊版本的指令（不可復原，我未執行，由你自行決定是否執行）**：
 
 ```bash
-# 1. 移除 sink 與其 IAM／LF（刪除 msk_connector_iceberg_sink.tf 後）
-cd infra/environments/dev-slice2 && terraform plan && terraform apply
-
-# 2. 移除 spike 資料表與查詢結果（會刪資料，需確認）
-aws athena start-query-execution --query-string "DROP TABLE bronze.spike_trade_events" \
-  --result-configuration OutputLocation=s3://danny-data-engineering/athena-results/spike/
-aws s3 rm s3://danny-data-engineering/lakehouse/bronze.db/spike_trade_events/ --recursive
-aws s3 rm s3://danny-data-engineering/athena-results/spike/ --recursive
+# ⚠️ 硬刪除：永久移除 spike 前綴下所有舊版本與 delete marker，無法復原
+B=danny-data-engineering
+for P in lakehouse/bronze.db/spike_trade_events/ lakehouse/silver.db/spike_trade/ \
+         glue-temp/spike-silver-trade/ athena-results/spike/; do
+  for KIND in Versions DeleteMarkers; do
+    aws s3api list-object-versions --bucket $B --prefix $P \
+      --query "{Objects: ${KIND}[].{Key:Key,VersionId:VersionId}}" --output json > /tmp/v.json
+    # 某類沒有項目時 Objects 為 null，delete-objects 會報錯，可忽略
+    aws s3api delete-objects --bucket $B --delete file:///tmp/v.json
+  done
+done
 ```
 
 ## 相關文件
@@ -311,4 +337,4 @@ aws s3 rm s3://danny-data-engineering/athena-results/spike/ --recursive
 - [ADR-0012](../architecture/adr/0012-kafka-connect-iceberg-sink-bronze.md)、[ADR-0007](../architecture/adr/0007-cdc-vs-batch-polling.md)（replication slot 注意事項）
 - [slice2-stack-lifecycle.md](slice2-stack-lifecycle.md) — 需補上「閒置會填滿 RDS」的警語（尚未更新）
 - [slice2-msk-connect-plugin-packaging-verification.md](slice2-msk-connect-plugin-packaging-verification.md) — 格式參考
-- [infra/environments/dev-slice2/msk_connector_iceberg_sink.tf](../../infra/environments/dev-slice2/msk_connector_iceberg_sink.tf)
+- `infra/environments/dev-slice2/msk_connector_iceberg_sink.tf`（已移除，見 commit `09f70e8`）
