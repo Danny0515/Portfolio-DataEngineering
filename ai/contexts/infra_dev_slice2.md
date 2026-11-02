@@ -4,17 +4,21 @@
 >
 > 依 §3.3(b)「用完即拆」策略，這組資源在 Slice 2a/2b 驗證期間維持運行，驗證全部完成後 destroy（見 §4 項目 10 的 [slice2-stack-lifecycle.md](../../docs/runbooks/slice2-stack-lifecycle.md)）——跟 [infra_dev.md](infra_dev.md)（Slice 0/1，長期持續運行）的生命週期不同，因此獨立成一份快照，不合併進同一份文件。
 
-**最後更新**：2026-10-27
+**最後更新**：2026-10-30
 **Terraform 工作目錄**：`infra/environments/dev-slice2/`（依 RULE-002，優先在本機以 `AWS_PROFILE=dt-lab-long-term-mfa` 執行）
 **State 位置**：`s3://danny-data-engineering/terraform-state/dev/slice2.tfstate`
 
-## 目前狀態：**運行中**（2026-10-27 為 Slice 2b 開發冷啟動復原，`terraform state list` 共 55 項）
+## 目前狀態：**運行中**（2026-10-27 為 Slice 2b 開發冷啟動復原；2026-10-30 加入 Iceberg sink spike，`terraform state list` 共 69 項）
 
-為了讓 Slice 2b 有 topic 可消費，這次依 [slice2-stack-lifecycle.md](../../docs/runbooks/slice2-stack-lifecycle.md) 的三階段 Cold Start 復原 2a 原樣（`.tf` 自 2026-10-02 之後沒有異動）。階段一 13 項、階段三 31 項全部 `Apply complete`，無 destroy。MSK cluster 建立約 29 分鐘、connector 約 3 分 46 秒；全程無 RDS 容量不足、state lock 或 connector 脫離 state 的狀況。
+2026-10-27 依 [slice2-stack-lifecycle.md](../../docs/runbooks/slice2-stack-lifecycle.md) 三階段 Cold Start 復原 2a 原樣（55 項）；2026-10-30 為 Slice 2b §4 項目 1(a) 的 spike 新增 Iceberg sink 相關資源（14 項，見 `msk_connector_iceberg_sink.tf`），並因 spike 發現調整了既有設定（state 項目數不變，仍為 69 項；2026-10-30 另有 WAL 永久修補，見下方「目前狀態重點」）：`msk.tf` 的 broker 設定新增 `transaction.state.log.replication.factor=2`／`transaction.state.log.min.isr=1`（MSK configuration 目前為 revision 2）、`rds.tf` 儲存 20 → 30GB（含 `apply_immediately`）。完整過程、失敗與副作用台帳見 [slice2b-iceberg-sink-spike-verification.md](../../docs/runbooks/slice2b-iceberg-sink-spike-verification.md)。
 
-**煙霧測試結果**：connector `RUNNING`；`slice2-trade-generator`（`num_trades: 5, seed: 1`）回報 `INSERT 5 / UPDATE 9 / DELETE 1`，`slice2-cdc-event-verifier` 從 `transaction.trade.v1` 讀到 16 筆（`c` 5、`u` 9、`d` 1、tombstone 1），與 generator 一致；事件帶 `before`／`after`／`source.lsn`。topic 目前有這 16 筆事件（全在 partition 0，offset 0–15），RDS 內有 5 筆交易（其中 1 筆已刪除）。
+**目前狀態重點**：
+- Debezium connector 在 2026-10-30 被重建一次（舊 task 因 RDS 儲存被 WAL 填滿而失效，見 spike runbook），目前 ARN 為下表所列；重建時重新做了 initial snapshot。
+- Iceberg sink connector `slice2-iceberg-sink-spike` 運行中，寫入 `bronze.spike_trade_events`（38 列）。
+- RDS 內有 10 筆交易；另有心跳表 `debezium_heartbeat`（1 列，每分鐘更新）。
+- **閒置 WAL 防護已就緒**（[ADR-0013](../../docs/architecture/adr/0013-debezium-heartbeat-and-slot-wal-cap.md)）：Debezium connector 已加 heartbeat（每 60 秒，就地更新、未重建），RDS parameter group 已設 `max_slot_wal_keep_size=10240`。2026-10-30 實測閒置時 replication slot 保留量穩定在 64MB（`wal_status=reserved`）；更長時間（數小時）閒置尚未實測。檢查方式：generator 的 `{"diagnose_replication": true}`。
 
-**費用提醒**：這組資源粗估約 $0.28–0.30／小時（放一天約 $7），2b 開發空檔或結束後請依 runbook 的「銷毀流程」`terraform destroy`，並將本檔改回「已銷毀」。
+**費用提醒**：這組資源粗估約 $0.28–0.30／小時，再加 sink connector（1 MCU，約 $0.11／小時）；放一天約 $9–10。2b 開發空檔或結束後請依 runbook 的「銷毀流程」`terraform destroy`，並將本檔改回「已銷毀」。
 
 ## Outputs
 
@@ -32,7 +36,9 @@
 | `msk_cluster_arn` | `arn:aws:kafka:ap-northeast-1:393326654921:cluster/slice2-trade-msk/ee5bc677-5e26-4eef-b16c-add091085c76-2` |
 | `msk_bootstrap_brokers_tls` | `b-1.slice2trademsk.0i82j6.c2.kafka.ap-northeast-1.amazonaws.com:9094,b-2.slice2trademsk.0i82j6.c2.kafka.ap-northeast-1.amazonaws.com:9094` |
 | `msk_connector_name` | `slice2-debezium-postgres-connector` |
-| `msk_connector_arn` | `arn:aws:kafkaconnect:ap-northeast-1:393326654921:connector/slice2-debezium-postgres-connector/7862dab1-049b-4bbf-827c-c54b628e8758-2` |
+| `msk_connector_arn` | `arn:aws:kafkaconnect:ap-northeast-1:393326654921:connector/slice2-debezium-postgres-connector/ec3ce8c2-f31c-4be8-989c-71a012e7090e-2`（2026-10-30 重建後的 ARN） |
+| `iceberg_sink_connector_arn` | `arn:aws:kafkaconnect:ap-northeast-1:393326654921:connector/slice2-iceberg-sink-spike/c1f49528-dc6f-4a66-8588-1f66fdb28e9e-2`（spike 專用） |
+| `iceberg_sink_log_group_name` | `/msk-connect/slice2-iceberg-sink-spike` |
 | `msk_connect_execution_role_arn` | `arn:aws:iam::393326654921:role/slice2-msk-connect-debezium` |
 | `msk_connect_worker_log_group_name` | `/msk-connect/slice2-debezium-postgres-connector` |
 | `msk_connect_plugin_bucket_name` | `danny-data-engineering-slice2-msk-connect` |
@@ -45,7 +51,7 @@
 
 另外，Debezium converter 自動註冊的真實 schema `transaction.trade.v1`（相容性 `BACKWARD`，已於 2026-10-27 以 `aws glue get-schema` 確認）不在 Terraform state 內，隨 registry 一起銷毀。
 
-## 已管理資源（`terraform state list`，共 55 項，含 data source 與 null_resource）
+## 已管理資源（`terraform state list`，共 69 項，含 data source 與 null_resource）
 
 | 類別 | 資源 |
 | --- | --- |
@@ -56,6 +62,7 @@
 | Schema Registry | `aws_glue_registry.trade_events`、`aws_glue_schema.trade_events` |
 | MSK Connect plugin | `aws_s3_bucket.msk_connect_plugins`、`aws_s3_bucket_public_access_block.msk_connect_plugins`、`aws_s3_object.debezium_combined_plugin`／`debezium_postgres_plugin`／`glue_schema_registry_converter_plugin`、`aws_mskconnect_custom_plugin.debezium_combined`／`debezium_postgres`／`glue_schema_registry_converter`、`null_resource.build_debezium_combined_plugin`／`build_debezium_postgres_plugin`／`build_glue_schema_registry_converter_plugin` |
 | MSK Connect connector | `aws_mskconnect_connector.debezium_postgres`、`aws_cloudwatch_log_group.msk_connect_debezium`、`aws_iam_role.msk_connect_debezium`、`aws_iam_policy.msk_connect_permissions`、`aws_iam_role_policy_attachment.msk_connect_permissions` |
+| Iceberg sink spike（`msk_connector_iceberg_sink.tf`，可整檔移除） | `aws_mskconnect_connector.iceberg_sink`、`aws_mskconnect_custom_plugin.iceberg_sink`、`aws_s3_object.iceberg_sink_plugin`、`aws_cloudwatch_log_group.msk_connect_iceberg_sink`、`aws_iam_role.msk_connect_iceberg_sink`、`aws_iam_policy.iceberg_sink_permissions`、`aws_iam_role_policy_attachment.iceberg_sink_permissions`、`aws_lakeformation_permissions.iceberg_sink_create_database`／`iceberg_sink_database`／`iceberg_sink_tables`、`null_resource.build_iceberg_sink_plugin`、`data.archive_file.iceberg_sink_plugin`、`data.aws_iam_policy_document.iceberg_sink_trust`／`iceberg_sink_permissions` |
 | 驗證用 Lambda | `aws_lambda_function.cdc_event_verifier`、`aws_iam_role.cdc_event_verifier`、`aws_iam_policy.cdc_event_verifier_permissions`、`aws_iam_role_policy_attachment.cdc_event_verifier_permissions`／`cdc_event_verifier_vpc_access`、`null_resource.build_cdc_event_verifier` |
 | data source | `data.archive_file.*`（5 個）、`data.aws_caller_identity.current`、`data.aws_iam_policy_document.*`（5 個） |
 

@@ -2,7 +2,7 @@
 
 > 記錄 dev 環境目前由 Terraform 實際管理、已部署的資源現況。**這是快照，每次 `terraform apply` 後直接覆寫更新，不累加歷史**（歷史異動查 git log 或 changelog.md）。內容一律以 `terraform output` / `terraform state list` 的實際輸出為準，不手動編造。
 
-**最後更新**：2026-08-20
+**最後更新**：2026-11-02
 **Terraform 工作目錄**：`infra/environments/dev/`（依 RULE-002，優先在本機以 `AWS_PROFILE=dt-lab-long-term-mfa` 執行；MFA 連線失敗才退回 bastion `~/Portfolio-DataEngineering/infra/environments/dev/`）
 **State 位置**：`s3://danny-data-engineering/terraform-state/dev/slice0.tfstate`
 
@@ -37,8 +37,11 @@
 - `aws_s3_object.bronze_script`
 - `aws_s3_object.silver_script`
 - `aws_s3_object.gold_script`
+- `aws_s3_object.silver_stock_suite`
 - `aws_glue_job.bronze_stock`
 - `aws_glue_job.silver_stock`
 - `aws_glue_job.gold_monthly_ohlcv`
+- `aws_s3_object.silver_trade_stream_script`（Slice 2b spike，`glue_silver_trade_stream.tf`，待移除）
+- `aws_glue_job.silver_trade_stream_spike`（Slice 2b spike，Glue Streaming、G.025X，待移除；平時應為停止狀態）
 
 > 專案總架構師帳號的 Lake Formation 授權不在此追蹤（刻意不由本專案 Terraform 管理，理由見 [ADR-0005](../../docs/architecture/adr/0005-project-admin-permission-exemption.md)），其現況需直接查 `aws lakeformation list-permissions`，不會出現在上方清單。

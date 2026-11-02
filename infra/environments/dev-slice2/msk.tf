@@ -26,10 +26,16 @@ resource "aws_msk_configuration" "trade" {
   # 寫入時自動建立，不用額外的 provider/Lambda 手動建立 topic。
   # default.replication.factor=2：對應 2-broker 佈署，讓自動建立的 topic 兩個 broker
   # 都有副本。min.insync.replicas=1：demo 用途刻意寬鬆，一顆 broker 掛掉仍可寫入。
+  # transaction.state.log.*（Slice 2b spike 新增）：Iceberg sink 的 control topic
+  # 用交易式 producer，broker 需要 __transaction_state 內部 topic；預設副本數（3）
+  # 大於本叢集的 broker 數（2），內部 topic 建不出來，producer 會卡在
+  # InitProducerId 逾時（spike 實測的現象）。對齊 2-broker 與 min.isr=1。
   server_properties = <<-PROPERTIES
     auto.create.topics.enable=true
     default.replication.factor=2
     min.insync.replicas=1
+    transaction.state.log.replication.factor=2
+    transaction.state.log.min.isr=1
   PROPERTIES
 }
 
